@@ -1,0 +1,50 @@
+{
+	"name": "haxe",
+	"description": "Haxe Language Extension",
+	"version": "0.0.1",
+	"publisher": "Jeff Ward & Dan Korostelev",
+	"engines": {
+		"vscode": "^0.10.1"
+	},
+	"categories": [
+		"Languages"
+	],
+	"activationEvents": [
+		"onLanguage:haxe"
+	],
+	"main": "./haxe.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "haxe.hello",
+				"title": "Hello from Haxe!"
+			}
+		],	
+		"languages": [
+			{
+				"id": "haxe",
+				"aliases": ["Haxe", "haxe"],
+				"extensions": [".hx",".hxsl",".hscript"],
+				"configuration": "./haxe.configuration.json"
+			},
+			{
+				"id": "hxml",
+				"aliases": ["HXML", "hxml"],
+				"extensions": [".hxml"],
+				"configuration": "./hxml.configuration.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "haxe",
+				"scopeName": "source.haxe",
+				"path": "./syntaxes/haxe.tmLanguage"
+			},
+			{
+				"language": "hxml",
+				"scopeName": "source.hxml",
+				"path": "./syntaxes/hxml.tmLanguage"
+			}
+		]
+	}
+}

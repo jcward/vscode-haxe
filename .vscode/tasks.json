@@ -1,0 +1,28 @@
+// A task runner example that defines a problemMatcher inline instead of using
+// a predfined one.
+
+{
+	"version": "0.1.0",
+	"command": "haxe.exe",
+	"isShellCommand": true,
+	"args": ["build.hxml"],
+	"showOutput": "always",
+	"problemMatcher": {
+		// The problem is owned by the typescript language service. Ensure that the problems
+		// are merged with problems produced by Visual Studio's language service.
+		"owner": "haxe",
+		// The file name for reported problems is relative to the current working directory.
+		"fileLocation": ["relative", "${cwd}"],
+		// The actual pattern to match problems in the output.
+		"pattern": {
+			// The regular expression. Matches HelloWorld.ts(2,10): error TS2339: Property 'logg' does not exist on type 'Console'.
+			"regexp": "^(.+):(\\d+): (?:lines \\d+-\\d+|character(?:s \\d+-| )(?:\\d+)) : (.*)$",
+			// The match group that denotes the file containing the problem.
+			"file": 1,
+			// The match group that denotes the problem location.
+			"line": 2,
+			// The match group that denotes the problem's message.
+			"message": 3
+		}
+	}
+}
