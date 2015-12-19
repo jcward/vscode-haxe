@@ -1,0 +1,24 @@
+{
+	"name": "language-client-test",
+	"description": "VSCode part of a language server",
+	"author": "Microsoft Corporation",
+	"license": "MIT",
+	"version": "0.0.1",
+	"publisher": "vscode",
+	"engines": {
+		"vscode": "0.10.x"
+	},
+	"categories": [
+		"Others"
+	],
+	"activationEvents": [
+		"onLanguage:haxe"
+	],
+	"main": "./bin/Main",
+	"contributes": {
+	},	
+	"scripts": {
+		"vscode:prepublish": "./bin/Main",
+		"compile": "./bin/Main"
+	}
+}
