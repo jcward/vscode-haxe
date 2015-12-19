@@ -23,7 +23,7 @@ class Main {
       }
     });
 
-		// Vscode.window.showInformationMessage("Haxe language support loaded!");
+		//Vscode.window.showInformationMessage("Haxe language support loaded!");
 	}
 
   static function test_register_command(context:ExtensionContext):Void
@@ -103,10 +103,18 @@ class CompletionHandler implements CompletionItemProvider
     //}
 
     var byte_pos = Std.int( document.offsetAt(position) + dot_offset );
+    var path:String = document.uri.path;
+    var win:Int = path.indexOf(":/"); // Windows hack: /c:/...
+    if (win>=0 && win<4) {
+      path = path.substr(win-1, path.length);
+    }
+
+		//Vscode.window.showInformationMessage("C: "+byte_pos);
+		//Vscode.window.showInformationMessage("F: "+path);
 
     return new Thenable<Array<CompletionItem>>( function(resolve:Array<CompletionItem>->Void) {
       function make_request() {
-        server.request(document.uri.path,
+        server.request(path,
                        byte_pos,
                        function(items:Array<CompletionItem>) {
                          resolve(items);
@@ -177,6 +185,7 @@ class CompletionServer
 
     // TODO: xml parsing, for now, a hack
     //Vscode.window.showInformationMessage("Decoding: "+data_str.length);
+    //Vscode.window.showInformationMessage("D: "+data_str);
 
     untyped __js__('
                   // Hack hack hack

@@ -55,9 +55,12 @@ CompletionHandler.prototype = {
 		var subline = HxOverrides.substr(line.text,0,position.character | 0);
 		if(subline.indexOf(".") >= 0) dot_offset = subline.lastIndexOf(".") - (position.character | 0) + 1;
 		var byte_pos = Std["int"](document.offsetAt(position) + dot_offset);
+		var path = document.uri.path;
+		var win = path.indexOf(":/");
+		if(win >= 0 && win < 4) path = HxOverrides.substr(path,win - 1,path.length);
 		return new Promise(function(resolve) {
 			var make_request = function() {
-				_g.server.request(document.uri.path,byte_pos,function(items) {
+				_g.server.request(path,byte_pos,function(items) {
 					resolve(items);
 				});
 			};
