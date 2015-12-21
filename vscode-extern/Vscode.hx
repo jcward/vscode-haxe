@@ -44,7 +44,7 @@ extern class Languages {
   // Functions
   public function createDiagnosticCollection(?name:String):DiagnosticCollection;
   public function getLanguages():Thenable<Array<String>>;
-  public function match(selector:DocumentSelector, document:TextDocument):Float;
+  public function match(selector:DocumentSelector, document:TextDocument):Int;
   public function registerCodeActionsProvider(selector:DocumentSelector, provider:CodeActionProvider):Disposable;
   public function registerCodeLensProvider(selector:DocumentSelector, provider:CodeLensProvider):Disposable;
   public function registerCompletionItemProvider(selector:DocumentSelector, provider:CompletionItemProvider, triggerCharacters:Rest<String>):Disposable;
@@ -94,15 +94,15 @@ extern class Workspace {
   public var textDocuments:Array<TextDocument>;
   // Events
   // TODO: onDidChangeConfiguration:Event<Void>;
-  // TODO: onDidChangeTextDocument:Event<TextDocumentChangeEvent>;
-  // TODO: onDidCloseTextDocument:Event<TextDocument>;
-  // TODO: onDidOpenTextDocument:Event<TextDocument>;
-  // TODO: onDidSaveTextDocument:Event<TextDocument>;
   // Functions
+  public function onDidChangeTextDocument(event:TextDocumentChangeEvent -> Void):Disposable;
+  public function onDidOpenTextDocument(event:TextDocument -> Void):Disposable;
+  public function onDidCloseTextDocument(event:TextDocument -> Void):Disposable;
+  public function onDidSaveTextDocument(event:TextDocument -> Void):Disposable;
   public function applyEdit(edit:WorkspaceEdit):Thenable<Bool>;
   public function asRelativePath(pathOrUri:EitherType<String, Uri>):String;
   public function createFileSystemWatcher(globPattern:String, ?ignoreCreateEvents:Bool, ?ignoreChangeEvents:Bool, ?ignoreDeleteEvents:Bool):FileSystemWatcher;
-  public function findFiles(include:String, exclude:String, ?maxResults:Float):Thenable<Array<Uri>>;
+  public function findFiles(include:String, exclude:String, ?maxResults:Int):Thenable<Array<Uri>>;
   public function getConfiguration(?section:String):WorkspaceConfiguration;
   // Hmm, couldn't get @:overload to work...
   public function openTextDocument(uri_or_fileName:EitherType<Uri, String>):Thenable<TextDocument>;
@@ -459,19 +459,19 @@ extern class ParameterInformation {
 }
 extern class Position {
   // Constructors
-  public function new(line:Float, character:Float);
+  public function new(line:Int, character:Int);
   // Properties
-  public var character:Float;
-  public var line:Float;
+  public var character:Int;
+  public var line:Int;
   // Methods
-  public function compareTo(other:Position):Float;
+  public function compareTo(other:Position):Int;
   public function isAfter(other:Position):Bool;
   public function isAfterOrEqual(other:Position):Bool;
   public function isBefore(other:Position):Bool;
   public function isBeforeOrEqual(other:Position):Bool;
   public function isEqual(other:Position):Bool;
-  public function translate(?lineDelta:Float, ?characterDelta:Float):Position;
-  public function with(?line:Float, ?character:Float):Position;
+  public function translate(?lineDelta:Int, ?characterDelta:Int):Position;
+  public function with(?line:Int, ?character:Int):Position;
 }
 extern class Quickpickitem {
   // Properties
@@ -601,16 +601,16 @@ extern class TextDocument {
   public var isDirty:Bool;
   public var isUntitled:Bool;
   public var languageId:String;
-  public var lineCount:Float;
+  public var lineCount:Int;
   public var uri:Uri;
   public var version:Float;
   // Methods
   public function getText(?range:Range):String;
   public function getWordRangeAtPosition(position:Position):Range;
-  public function lineAt(line_or_position:EitherType<Float,Position>):TextLine;
+  public function lineAt(line_or_position:EitherType<Int,Position>):TextLine;
   //public function lineAt(position:Position):TextLine;
-  public function offsetAt(position:Position):Float;
-  public function positionAt(offset:Float):Position;
+  public function offsetAt(position:Position):Int;
+  public function positionAt(offset:Int):Position;
   public function save():Thenable<Bool>;
   public function validatePosition(position:Position):Position;
   public function validateRange(range:Range):Range;
@@ -623,7 +623,7 @@ extern class TextDocumentChangeEvent {
 extern class TextDocumentContentChangeEvent {
   // Properties
   public var range:Range;
-  public var rangeLength:Float;
+  public var rangeLength:Int;
   public var text:String;
 }
 extern class TextEdit {
@@ -685,9 +685,9 @@ extern class Texteditorselectionchangeevent {
 }
 extern class TextLine {
   // Properties
-  public var firstNonWhitespaceCharacterIndex:Float;
+  public var firstNonWhitespaceCharacterIndex:Int;
   public var isEmptyOrWhitespace:Bool;
-  public var lineNumber:Float;
+  public var lineNumber:Int;
   public var range:Range;
   public var rangeIncludingLineBreak:Range;
   public var text:String;
@@ -737,7 +737,7 @@ extern class WorkspaceConfiguration {
 }
 extern class WorkspaceEdit {
   // Properties
-  public var size:Float;
+  public var size: Int;
   // Methods
   public function delete(uri:Uri, range:Range):Void;
   public function entries():Dynamic /* [Uri, Array<TextEdit>][] */;

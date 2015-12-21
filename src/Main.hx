@@ -2,6 +2,14 @@ import Vscode;
 import haxe.ds.Either;
 import haxe.Constraints.Function;
 
+import Patcher.PatcherUnit;
+using Tool;
+
+/*
+ compile with -DDO_FULL_PATCH if you want to sent the whole file at completion
+ instead of incremental change
+*/
+
 class Main {
 
 	@:expose("activate")
@@ -16,7 +24,7 @@ class Main {
     var handler = new CompletionHandler(server, context);
 
     // TODO: server implements Disposable
-		context.subscriptions.push(untyped {
+    context.subscriptions.push(untyped {
       dispose:function() {
         Vscode.window.showInformationMessage("Got dispose!");
         //TODO: server.kill();
@@ -74,15 +82,58 @@ class Main {
 class CompletionHandler implements CompletionItemProvider
 {
   var server:CompletionServer;
-
+  
   public function new(server:CompletionServer,
                       context:ExtensionContext):Void
   {
     this.server = server;
-
+        
     // Test hover code
-		var disposable = Vscode.languages.registerCompletionItemProvider('haxe', this, '.');
+	var disposable = Vscode.languages.registerCompletionItemProvider('haxe', this, '.');
     context.subscriptions.push(disposable);
+    
+    function removePatch(document) {
+       if (server.isPatchAvailable) {
+          var path:String = document.uri.fsPath;
+          var client = server.client;
+          client.beginPatch(path).remove();
+          client.sendAll(null, null);         
+        }     
+   }
+ 
+    // remove the patch if the document is opened, saved, or closed  
+    context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument(removePatch));    
+    context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument(removePatch));
+    context.subscriptions.push(Vscode.workspace.onDidCloseTextDocument(removePatch));
+    
+#if DO_FULL_PATCH
+#else
+    function changePatch(event:TextDocumentChangeEvent) {
+        if (server.isPatchAvailable) {
+            var changes = event.contentChanges;
+            if (changes.length > 0) {
+                var document = event.document;
+                var docText = document.getText();
+                var client = server.client;
+                var patcher = client.beginPatch(document.uri.fsPath);
+                for (change in changes) {
+                    var rl = change.rangeLength;
+                    var range = change.range;
+                    var rs = document.offsetAt(range.start);
+                    if (change.rangeLength > 0) {
+                        patcher.delete(rs, rl, PatcherUnit.Char);
+                    }
+                    var text = change.text;
+                    if (text != "") {
+                        patcher.insert(rs, text, PatcherUnit.Char);
+                    }
+                }
+                client.sendAll(null, null); 
+            }
+        }
+    }
+    context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument(changePatch));
+#end
   }
 
   public function provideCompletionItems(document:TextDocument,
@@ -92,9 +143,9 @@ class CompletionHandler implements CompletionItemProvider
     // find last . before current position
     var line = document.lineAt(position);
     var dot_offset = 0;
-    var subline = line.text.substr(0, Std.int(position.character));
+    var subline = line.text.substr(0, position.character);
     if (subline.indexOf('.')>=0) {
-      dot_offset = subline.lastIndexOf('.') - Std.int(position.character) + 1;
+      dot_offset = subline.lastIndexOf('.') - position.character + 1;
     }
     // So far we don't parse this output from the completion server:
     // <type>key : String -&gt; Bool</type>
@@ -102,12 +153,9 @@ class CompletionHandler implements CompletionItemProvider
     //  dot_offset = subline.lastIndexOf('(') - position.character + 1;
     //}
 
-    var byte_pos = Std.int( document.offsetAt(position) + dot_offset );
-    var path:String = document.uri.path;
-    var win:Int = path.indexOf(":/"); // Windows hack: /c:/...
-    if (win>=0 && win<4) {
-      path = path.substr(win-1, path.length);
-    }
+    var byte_pos = document.offsetAt(position) + dot_offset;
+    byte_pos = document.getText().substr(0, byte_pos).byteLength();
+    var path:String = document.uri.fsPath;
 
 		//Vscode.window.showInformationMessage("C: "+byte_pos);
 		//Vscode.window.showInformationMessage("F: "+path);
@@ -124,12 +172,58 @@ class CompletionHandler implements CompletionItemProvider
       // TODO: haxe completion server requires save before compute...
       //       try temporary -cp?
       //       See: https://github.com/HaxeFoundation/haxe/issues/4651
-      if (document.isDirty) {
-        document.save().then(make_request);
-      } else {
-        make_request();
-      }
+      
+      var isDirty = document.isDirty;
+      var client = server.client;
 
+      function doRequest() {
+        if (server.isPatchAvailable) {
+#if DO_FULL_PATCH
+            if (isDirty) {
+                var client = server.client;
+                client.beginPatch(path).delete(0,-1).insert(0, document.getText());
+                make_request();
+            } else {
+                make_request();
+            }
+#else
+            make_request();
+#end
+        } else {
+            if (isDirty && server.isServerAvailable) {
+                document.save().then(make_request);
+            } else {
+                make_request();
+            }
+        }          
+      }
+      
+      if (!server.isServerAvailable) {
+          var hs = server.make_client();
+          var patcher = hs.beginPatch(path);
+          if (isDirty) {
+#if DO_FULL_PATCH
+#else
+              patcher.delete(0, -1).insert(0, document.getText());
+#end
+          } else {
+              patcher.remove();
+          }
+          server.isPatchAvailable = false;
+          hs.version().sendAll(
+             function(s:Socket, data:String) {
+                var b = HaxeClient.isOptionExists("--patch", data);
+                server.isPatchAvailable=b;
+            },
+            function (s:Socket, err:Socket.Error) {
+                doRequest();
+            },
+            function (s:Socket) {
+                server.isServerAvailable=!s.hasError;
+                doRequest();
+            }             
+          );
+      } else doRequest();
     });
   }
 	
@@ -159,13 +253,36 @@ extern class ChildProcess {
 class CompletionServer
 {
   // TODO: disposable, stop server
-  var port:Int;
-  var proj_dir:String;
-
+  public var host(default, null):String;
+  public var port(default, null):Int;
+  public var proj_dir(default, null):String;
+  
+  public var client(default, null):HaxeClient;
+  
+  public var isServerAvailable:Bool;
+  public var isPatchAvailable:Bool;
+  
+  public inline function make_client() return new HaxeClient(host, port);
+  
   public function new(proj_dir:String):Void
   {
     this.proj_dir = proj_dir;
+    
+    host = "127.0.0.1";
+    
     port = 6000; //INST_PORT++;
+
+    isServerAvailable = false;
+    isPatchAvailable = false;
+    
+    client = make_client();
+
+    // testing https://github.com/pleclech/haxe/tree/memory-file
+    // test to see if patcher is available
+    client.isPatchAvailable(function(data) {
+        isPatchAvailable = data.isOptionAvailable;
+        isServerAvailable = data.isServerAvailable;            
+    });
 
     var exec = ChildProcess.exec;
     //Vscode.window.showInformationMessage("Start? port="+port+", "+exec);
@@ -216,36 +333,18 @@ class CompletionServer
   public function request(file:String,
                           byte_pos:Int,
                           callback:Array<CompletionItem>->Void) {
-    var net = Net;
+ 
+ 
     var hxml_file = "build.hxml"; // TODO: externalize
     var dir = this.proj_dir;
 
     // I prototyped this in JS, and since snowkit/Tides will provide
     // this functionality, I'll skip porting it to Haxe here.
 
-    var parse:Function = parse_items;
-
-    untyped __js__('
-    var NEWLINE = "\\n";
-
-    var client = new net.Socket();
-    client.connect(this.port, "127.0.0.1", function() {
-
-        // Write a message to the socket as soon as the client is connected, the server will receive it as message from the client 
-        client.write("--cwd "+dir+NEWLINE);
-        client.write(" "+hxml_file+"\\n--display "+file+"@"+byte_pos+NEWLINE);
-        client.write("\\x00");
-     
-    });
-
-    // Add a data event handler for the client socket
-    // data is what the server sent to this socket
-    var data = "";
-    client.on("data", function(d) {
-      data += d;
-    });
-
-    function decode(data) {
+    var decode:Function;
+        
+untyped __js__('
+    decode = function decode(data) {
       var stdout = "";
       var stderr = "";
       var hasError = false;
@@ -270,12 +369,25 @@ class CompletionServer
 
       return { stdout:stdout, stderr:stderr, hasError:hasError }
     }
-
-    // Add a close event handler for the client socket
-    client.on("close", function() {
-      callback(parse(decode(data)));
-    });
 ');
+
+    client.cwd(dir);
+    client.custom(' $hxml_file');
+    client.display(file, byte_pos, HaxeClient.DisplayMode.Default);
+    client.sendAll(
+        function (s, data) {
+        },
+        function (s, err) {
+            isServerAvailable = false;
+            err.message.displayAsError();
+            callback([]);
+        },
+        function (s) {
+            isServerAvailable = !s.hasError;
+            var data = s.datas.join("");
+            callback(parse_items(decode(data)));
+        }
+    );
   }
 
 }
