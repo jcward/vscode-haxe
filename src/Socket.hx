@@ -12,21 +12,24 @@ class Socket {
     public var custom:Dynamic;
     public var isConnected(default, null):Bool;
     public var isClosed(default, null):Bool;
-    public var hasError(default, null):Bool;
+    public var error(default, null):Error;
     public function new() {
         s = new Socket_();
+        reset();
+    }
+    public function reset() {
         datas = [];
         isConnected = false;
         isClosed = false;
-        hasError = false;
+        error = null;
     }
-    function onConnect(callback:Socket->Void) {
+    function onConnect(callback:Null<Socket->Void>) {
         if (callback!=null)  callback(this);
     }
-    function onError(err, callback:Socket->Error->Void) {
+    function onError(err, callback:Null<Socket->Error->Void>) {
         if (callback!=null) callback(this, err);
     }
-    function onData(data:Dynamic, callback:Socket->String->Void) {
+    function onData(data:Dynamic, callback:Null<Socket->String->Void>) {
 #if js
         data = data.toString();        
 #end    
@@ -38,14 +41,14 @@ class Socket {
         isClosed = true;
         if (callback!=null) callback(this);        
     }
-    public function connect (host:String, port:Int, onConnect:Socket->Void, onData:Socket->String->Void, onError:Socket->Error->Void, ?onClose:Socket->Void=null) {
+    public function connect (host:String, port:Int, onConnect:Null<Socket->Void>, onData:Null<Socket->String->Void>, onError:Null<Socket->Error->Void>, ?onClose:Null<Socket->Void>=null) {
+        error = null;
  #if js
        s.on('error', function(err) {
-          hasError = true;
+          error = err;         
           this.onError(err, onError);  
        });
        s.on('data', function(data) {
-           hasError = false;
           this.onData(data, onData);  
        });
        s.on('close', function() {
@@ -53,7 +56,6 @@ class Socket {
        });       
        s.connect(port, host, function() {
            isConnected = true;
-           hasError = false;
            this.onConnect(onConnect);       
        });
  #else

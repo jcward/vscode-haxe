@@ -14,129 +14,13 @@ EReg.prototype = {
 		return this.r.m != null;
 	}
 };
-var DisplayMode = { __ename__ : true, __constructs__ : ["Default","Position","Usage","Type","TopLevel","Resolve"] };
-DisplayMode.Default = ["Default",0];
-DisplayMode.Default.toString = $estr;
-DisplayMode.Default.__enum__ = DisplayMode;
-DisplayMode.Position = ["Position",1];
-DisplayMode.Position.toString = $estr;
-DisplayMode.Position.__enum__ = DisplayMode;
-DisplayMode.Usage = ["Usage",2];
-DisplayMode.Usage.toString = $estr;
-DisplayMode.Usage.__enum__ = DisplayMode;
-DisplayMode.Type = ["Type",3];
-DisplayMode.Type.toString = $estr;
-DisplayMode.Type.__enum__ = DisplayMode;
-DisplayMode.TopLevel = ["TopLevel",4];
-DisplayMode.TopLevel.toString = $estr;
-DisplayMode.TopLevel.__enum__ = DisplayMode;
-DisplayMode.Resolve = function(v) { var $x = ["Resolve",5,v]; $x.__enum__ = DisplayMode; $x.toString = $estr; return $x; };
-var HaxeClient = function(host,port) {
-	this.host = host;
-	this.port = port;
-	this.reset();
-};
-HaxeClient.__name__ = true;
-HaxeClient.isOptionExists = function(optionName,data) {
-	var re = new EReg("unknown option '" + optionName + "'","");
-	return !re.match(data);
-};
-HaxeClient.prototype = {
-	reset: function() {
-		this.cmds = [];
-		this.patcher = null;
-	}
-	,cwd: function(dir) {
-		this.cmds.push("--cwd " + dir + "\n");
-		return this;
-	}
-	,version: function() {
-		this.cmds.push("-version\n");
-		return this;
-	}
-	,display: function(fileName,pos,mode) {
-		var dm;
-		switch(mode[1]) {
-		case 0:
-			dm = "";
-			break;
-		case 1:
-			dm = "@position";
-			break;
-		case 2:
-			dm = "@usage";
-			break;
-		case 3:
-			dm = "@position";
-			break;
-		case 4:
-			dm = "@toplevel";
-			break;
-		case 5:
-			var v = mode[2];
-			dm = "@resolve@" + v;
-			break;
-		}
-		this.cmds.push("--display " + fileName + "@" + pos + dm + "\n");
-		return this;
-	}
-	,custom: function(data) {
-		this.cmds.push(data + "\n");
-		return this;
-	}
-	,beginPatch: function(fileName) {
-		this.endPatch();
-		this.patcher = new Patcher(fileName);
-		return this.patcher;
-	}
-	,endPatch: function() {
-		if(this.patcher != null) {
-			this.cmds.push(this.patcher.get_cmd());
-			this.patcher = null;
-		}
-	}
-	,sendAll: function(onData,onError,onClose) {
-		var _g = this;
-		this.endPatch();
-		var s = new Socket();
-		s.connect(this.host,this.port,$bind(this,this._onConnect),onData,function(s1,err) {
-			_g.reset();
-			if(onError != null) onError(s1,err);
-		},onClose);
-		return s;
-	}
-	,_onConnect: function(s) {
-		var _g = 0;
-		var _g1 = this.cmds;
-		while(_g < _g1.length) {
-			var cmd = _g1[_g];
-			++_g;
-			s.write(cmd);
-		}
-		s.write("\x00");
-		this.reset();
-	}
-	,isPatchAvailable: function(onData) {
-		var _g = this;
-		var oldCmds = this.cmds;
-		var oldPatcher = this.patcher;
-		this.reset();
-		this.beginPatch("~.hx").remove();
-		this.version();
-		this.sendAll(function(s,data) {
-			_g.cmds = oldCmds;
-			_g.patcher = oldPatcher;
-			var b = HaxeClient.isOptionExists("--patch",data);
-			onData({ isServerAvailable : true, isOptionAvailable : b});
-		},function(s1,err) {
-			_g.cmds = oldCmds;
-			_g.patcher = oldPatcher;
-			onData({ isServerAvailable : false, isOptionAvailable : false});
-		});
-	}
-};
 var HxOverrides = function() { };
 HxOverrides.__name__ = true;
+HxOverrides.cca = function(s,index) {
+	var x = s.charCodeAt(index);
+	if(x != x) return undefined;
+	return x;
+};
 HxOverrides.substr = function(s,pos,len) {
 	if(len == null) len = s.length; else if(len < 0) {
 		if(pos == 0) len = s.length + len; else return "";
@@ -185,33 +69,41 @@ var CompletionHandler = function(server,context) {
 		if(server.isPatchAvailable) {
 			var path = document.uri.fsPath;
 			var client = server.client;
-			client.beginPatch(path).remove();
-			client.sendAll(null,null);
+			client.cmdLine.beginPatch(path).remove();
+			client.sendAll(null);
 		}
 	};
 	context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument(removePatch));
 	context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument(removePatch));
 	context.subscriptions.push(Vscode.workspace.onDidCloseTextDocument(removePatch));
 	var changePatch = function(event) {
-		if(server.isPatchAvailable) {
+		if(!server.isServerAvailable) {
 			var changes = event.contentChanges;
 			if(changes.length > 0) {
 				var document1 = event.document;
-				var docText = document1.getText();
 				var client1 = server.client;
-				var patcher = client1.beginPatch(document1.uri.fsPath);
+				var patcher = client1.cmdLine.beginPatch(document1.uri.fsPath);
+				if(document1.isDirty) patcher["delete"](0,-1).insert(0,document1.getText()); else patcher.remove();
+				client1.sendAll(null);
+			}
+		} else if(server.isPatchAvailable) {
+			var changes1 = event.contentChanges;
+			if(changes1.length > 0) {
+				var document2 = event.document;
+				var client2 = server.client;
+				var patcher1 = client2.cmdLine.beginPatch(document2.uri.fsPath);
 				var _g = 0;
-				while(_g < changes.length) {
-					var change = changes[_g];
+				while(_g < changes1.length) {
+					var change = changes1[_g];
 					++_g;
 					var rl = change.rangeLength;
 					var range = change.range;
-					var rs = document1.offsetAt(range.start);
-					if(change.rangeLength > 0) patcher["delete"](rs,rl,"c");
+					var rs = document2.offsetAt(range.start);
+					if(change.rangeLength > 0) patcher1["delete"](rs,rl,"c");
 					var text = change.text;
-					if(text != "") patcher.insert(rs,text,"c");
+					if(text != "") patcher1.insert(rs,text,"c");
 				}
-				client1.sendAll(null,null);
+				client2.sendAll(null);
 			}
 		}
 	};
@@ -224,8 +116,6 @@ CompletionHandler.prototype = {
 		var _g = this;
 		var line = document.lineAt(position);
 		var dot_offset = 0;
-		var subline = HxOverrides.substr(line.text,0,position.character);
-		if(subline.indexOf(".") >= 0) dot_offset = subline.lastIndexOf(".") - position.character + 1;
 		var byte_pos = document.offsetAt(position) + dot_offset;
 		byte_pos = Tool.byteLength((function($this) {
 			var $r;
@@ -247,16 +137,20 @@ CompletionHandler.prototype = {
 			};
 			if(!_g.server.isServerAvailable) {
 				var hs = _g.server.make_client();
-				var patcher = hs.beginPatch(path);
+				var cl = hs.cmdLine;
+				var patcher = cl.beginPatch(path);
 				if(isDirty) patcher["delete"](0,-1).insert(0,document.getText()); else patcher.remove();
 				_g.server.isPatchAvailable = false;
-				hs.version().sendAll(function(s,data) {
-					var b = HaxeClient.isOptionExists("--patch",data);
-					_g.server.isPatchAvailable = b;
-				},function(s1,err) {
-					doRequest();
-				},function(s2) {
-					_g.server.isServerAvailable = !s2.hasError;
+				cl.version();
+				hs.sendAll(function(s,message,err) {
+					var isPatchAvailable = false;
+					var isServerAvailable = true;
+					if(err != null) isServerAvailable = false; else {
+						_g.server.isServerAvailable = true;
+						if(message.hasError) isPatchAvailable = haxe_HaxeClient.isOptionExists("--patch",message.stderr[0]); else isPatchAvailable = true;
+					}
+					_g.server.isServerAvailable = err == null;
+					_g.server.isPatchAvailable = isPatchAvailable;
 					doRequest();
 				});
 			} else doRequest();
@@ -274,7 +168,7 @@ var CompletionServer = function(proj_dir) {
 	this.port = 6000;
 	this.isServerAvailable = false;
 	this.isPatchAvailable = false;
-	this.client = new HaxeClient(this.host,this.port);
+	this.client = new haxe_HaxeClient(this.host,this.port);
 	this.client.isPatchAvailable(function(data) {
 		_g.isPatchAvailable = data.isOptionAvailable;
 		_g.isServerAvailable = data.isServerAvailable;
@@ -289,11 +183,11 @@ var CompletionServer = function(proj_dir) {
 CompletionServer.__name__ = true;
 CompletionServer.prototype = {
 	make_client: function() {
-		return new HaxeClient(this.host,this.port);
+		return new haxe_HaxeClient(this.host,this.port);
 	}
 	,parse_items: function(data) {
 		var rtn = [];
-		var data_str = data.stderr;
+		var data_str = data.stderr.join("\n");
 		
                   // Hack hack hack
                   var items = data_str.split("<i n=");
@@ -322,91 +216,34 @@ CompletionServer.prototype = {
 		var _g = this;
 		var hxml_file = "build.hxml";
 		var dir = this.proj_dir;
-		var decode;
-		
-    decode = function decode(data) {
-      var stdout = "";
-      var stderr = "";
-      var hasError = false;
-      var i = 0;
-      var data = data.split("\n");
-      while(i < data.length) {
-      	var line = data[i];
-      	++i;
-      	switch(line.charCodeAt(0)) {
-      	case 1:
-      		stdout += line.substr(1).split("\x01").join("\n");
-      		break;
-      	case 2:
-      		hasError = true;
-      		break;
-      	default:
-      		stderr += line + "\n";
-      	}
-      }
-
-      //Vscode.window.showInformationMessage("decoded: "+(stdout.length+stderr.length)+" bytes");
-
-      return { stdout:stdout, stderr:stderr, hasError:hasError }
-    }
-;
-		this.client.cwd(dir);
-		this.client.custom(" " + hxml_file);
-		this.client.display(file,byte_pos,DisplayMode.Default);
-		this.client.sendAll(function(s,data) {
-		},function(s1,err) {
-			_g.isServerAvailable = false;
-			Vscode.window.showErrorMessage(err.message);
-			callback([]);
-		},function(s2) {
-			_g.isServerAvailable = !s2.hasError;
-			var data1 = s2.datas.join("");
-			callback(_g.parse_items(decode(data1)));
+		var cl = this.client.cmdLine;
+		cl.cwd(dir).custom(" " + hxml_file).display(file,byte_pos,haxe_DisplayMode.Default);
+		this.client.sendAll(function(s,message,err) {
+			if(err != null) {
+				_g.isServerAvailable = false;
+				Vscode.window.showErrorMessage(err.message);
+				callback([]);
+			} else {
+				_g.isServerAvailable = true;
+				callback(_g.parse_items(message));
+			}
 		});
 	}
 };
 Math.__name__ = true;
-var Patcher = function(fileName) {
-	this.fileName = fileName;
-	this.actions = [];
-};
-Patcher.__name__ = true;
-Patcher.prototype = {
-	reset: function() {
-		this.actions = [];
-		return this;
-	}
-	,remove: function() {
-		this.actions.push("x\x01");
-		return this;
-	}
-	,'delete': function(pos,len,unit) {
-		if(unit == null) unit = "b";
-		this.actions.push("" + unit + "-" + pos + ":" + len + "\x01");
-		return this;
-	}
-	,insert: function(pos,text,unit) {
-		if(unit == null) unit = "b";
-		this.actions.push("" + unit + "+" + pos + ":" + text + "\x01");
-		return this;
-	}
-	,get_cmd: function() {
-		if(this.actions.length == 0) return "";
-		var tmp = this.actions.join("@");
-		var cmd = "--patch " + this.fileName + "@" + tmp + "\n";
-		return cmd;
-	}
-};
 var Socket = function() {
 	this.s = new js_node_net_Socket();
-	this.datas = [];
-	this.isConnected = false;
-	this.isClosed = false;
-	this.hasError = false;
+	this.reset();
 };
 Socket.__name__ = true;
 Socket.prototype = {
-	onConnect: function(callback) {
+	reset: function() {
+		this.datas = [];
+		this.isConnected = false;
+		this.isClosed = false;
+		this.error = null;
+	}
+	,onConnect: function(callback) {
 		if(callback != null) callback(this);
 	}
 	,onError: function(err,callback) {
@@ -424,12 +261,12 @@ Socket.prototype = {
 	}
 	,connect: function(host,port,onConnect,onData,onError,onClose) {
 		var _g = this;
+		this.error = null;
 		this.s.on("error",function(err) {
-			_g.hasError = true;
+			_g.error = err;
 			_g.onError(err,onError);
 		});
 		this.s.on("data",function(data) {
-			_g.hasError = false;
 			_g.onData(data,onData);
 		});
 		this.s.on("close",function() {
@@ -437,7 +274,6 @@ Socket.prototype = {
 		});
 		this.s.connect(port,host,function() {
 			_g.isConnected = true;
-			_g.hasError = false;
 			_g.onConnect(onConnect);
 		});
 	}
@@ -463,6 +299,206 @@ Tool.byteLength = function(str) {
 	return js_node_buffer_Buffer.byteLength(str);
 };
 var Vscode = require("vscode");
+var haxe_HaxeClient = function(host,port) {
+	this.host = host;
+	this.port = port;
+	this.cmdLine = new haxe_HaxeCmdLine();
+	this.clear();
+};
+haxe_HaxeClient.__name__ = true;
+haxe_HaxeClient.isOptionExists = function(optionName,data) {
+	var re = new EReg("unknown option '" + optionName + "'","");
+	return !re.match(data);
+};
+haxe_HaxeClient.prototype = {
+	clear: function() {
+		this.cmdLine.clear();
+	}
+	,sendAll: function(onClose) {
+		var _g = this;
+		this.cmdLine.endPatch();
+		var s = new Socket();
+		s.connect(this.host,this.port,$bind(this,this._onConnect),null,null,function(s1) {
+			_g.clear();
+			var stdout = [];
+			var stderr = [];
+			var hasError = false;
+			var nl = "\n";
+			var _g1 = 0;
+			var _g2 = s1.datas.join("").split(nl);
+			while(_g1 < _g2.length) {
+				var line = _g2[_g1];
+				++_g1;
+				var _g3 = HxOverrides.cca(line,0);
+				if(_g3 != null) switch(_g3) {
+				case 1:
+					stdout.push(HxOverrides.substr(line,1,null).split("\x01").join(nl));
+					break;
+				case 2:
+					hasError = true;
+					break;
+				default:
+					stderr.push(line);
+				} else stderr.push(line);
+			}
+			if(onClose != null) onClose(s1,{ stdout : stdout, stderr : stderr, hasError : hasError},s1.error);
+		});
+		return s;
+	}
+	,_onConnect: function(s) {
+		var _g = 0;
+		var _g1 = this.cmdLine.cmds;
+		while(_g < _g1.length) {
+			var cmd = _g1[_g];
+			++_g;
+			s.write(cmd);
+		}
+		s.write("\x00");
+	}
+	,isPatchAvailable: function(onData) {
+		var _g = this;
+		this.cmdLine.save();
+		this.cmdLine.beginPatch("~.hx").remove();
+		this.sendAll(function(s,message,error) {
+			_g.cmdLine.restore();
+			var isServerAvailable = true;
+			var isPatchAvailable = false;
+			if(error != null) isServerAvailable = false; else isPatchAvailable = !message.hasError;
+			onData({ isServerAvailable : isServerAvailable, isOptionAvailable : isPatchAvailable});
+		});
+	}
+};
+var haxe_DisplayMode = { __ename__ : true, __constructs__ : ["Default","Position","Usage","Type","TopLevel","Resolve"] };
+haxe_DisplayMode.Default = ["Default",0];
+haxe_DisplayMode.Default.toString = $estr;
+haxe_DisplayMode.Default.__enum__ = haxe_DisplayMode;
+haxe_DisplayMode.Position = ["Position",1];
+haxe_DisplayMode.Position.toString = $estr;
+haxe_DisplayMode.Position.__enum__ = haxe_DisplayMode;
+haxe_DisplayMode.Usage = ["Usage",2];
+haxe_DisplayMode.Usage.toString = $estr;
+haxe_DisplayMode.Usage.__enum__ = haxe_DisplayMode;
+haxe_DisplayMode.Type = ["Type",3];
+haxe_DisplayMode.Type.toString = $estr;
+haxe_DisplayMode.Type.__enum__ = haxe_DisplayMode;
+haxe_DisplayMode.TopLevel = ["TopLevel",4];
+haxe_DisplayMode.TopLevel.toString = $estr;
+haxe_DisplayMode.TopLevel.__enum__ = haxe_DisplayMode;
+haxe_DisplayMode.Resolve = function(v) { var $x = ["Resolve",5,v]; $x.__enum__ = haxe_DisplayMode; $x.toString = $estr; return $x; };
+var haxe_HaxeCmdLine = function() {
+	this.reset();
+};
+haxe_HaxeCmdLine.__name__ = true;
+haxe_HaxeCmdLine.prototype = {
+	clear: function() {
+		this.cmds = [];
+		this.patcher = null;
+	}
+	,reset: function() {
+		this.stack = [];
+		this.clear();
+	}
+	,cwd: function(dir) {
+		this.cmds.push("--cwd " + dir + "\n");
+		return this;
+	}
+	,verbose: function() {
+		this.cmds.push("-v\n");
+		return this;
+	}
+	,version: function() {
+		this.cmds.push("-version\n");
+		return this;
+	}
+	,wait: function(port) {
+		this.cmds.push("--wait " + port + "\n");
+		return this;
+	}
+	,display: function(fileName,pos,mode) {
+		var dm;
+		switch(mode[1]) {
+		case 0:
+			dm = "";
+			break;
+		case 1:
+			dm = "@position";
+			break;
+		case 2:
+			dm = "@usage";
+			break;
+		case 3:
+			dm = "@position";
+			break;
+		case 4:
+			dm = "@toplevel";
+			break;
+		case 5:
+			var v = mode[2];
+			dm = "@resolve@" + v;
+			break;
+		}
+		this.cmds.push("--display " + fileName + "@" + pos + dm + "\n");
+		return this;
+	}
+	,custom: function(data) {
+		this.cmds.push(data + "\n");
+		return this;
+	}
+	,beginPatch: function(fileName) {
+		this.endPatch();
+		this.patcher = new haxe_HaxePatcherCmd(fileName);
+		return this.patcher;
+	}
+	,endPatch: function() {
+		if(this.patcher != null) {
+			this.cmds.push(this.patcher.get_cmd());
+			this.patcher = null;
+		}
+	}
+	,save: function() {
+		this.stack.push({ cmds : this.cmds, patcher : this.patcher});
+		this.clear();
+	}
+	,restore: function() {
+		var i = this.stack.pop();
+		this.cmds = i.cmds;
+		this.patcher = i.patcher;
+	}
+};
+var haxe_HaxePatcherCmd = function(fileName) {
+	this.fileName = fileName;
+	this.actions = [];
+};
+haxe_HaxePatcherCmd.__name__ = true;
+haxe_HaxePatcherCmd.$name = function() {
+	return "--patch";
+};
+haxe_HaxePatcherCmd.prototype = {
+	reset: function() {
+		this.actions = [];
+		return this;
+	}
+	,remove: function() {
+		this.actions.push("x\x01");
+		return this;
+	}
+	,'delete': function(pos,len,unit) {
+		if(unit == null) unit = "b";
+		this.actions.push("" + unit + "-" + pos + ":" + len + "\x01");
+		return this;
+	}
+	,insert: function(pos,text,unit) {
+		if(unit == null) unit = "b";
+		this.actions.push("" + unit + "+" + pos + ":" + text + "\x01");
+		return this;
+	}
+	,get_cmd: function() {
+		if(this.actions.length == 0) return "";
+		var tmp = this.actions.join("@");
+		var cmd = "--patch" + ("" + this.fileName + "@" + tmp + "\n");
+		return cmd;
+	}
+};
 var js_Boot = function() { };
 js_Boot.__name__ = true;
 js_Boot.__string_rec = function(o,s) {

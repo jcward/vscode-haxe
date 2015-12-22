@@ -2,7 +2,10 @@ import Vscode;
 import haxe.ds.Either;
 import haxe.Constraints.Function;
 
-import Patcher.PatcherUnit;
+import haxe.HaxePatcherCmd;
+import haxe.HaxePatcherCmd.PatcherUnit;
+import haxe.HaxeClient;
+import haxe.HaxeClient.Message;
 using Tool;
 
 /*
@@ -96,8 +99,8 @@ class CompletionHandler implements CompletionItemProvider
        if (server.isPatchAvailable) {
           var path:String = document.uri.fsPath;
           var client = server.client;
-          client.beginPatch(path).remove();
-          client.sendAll(null, null);         
+          client.cmdLine.beginPatch(path).remove();
+          client.sendAll(null);         
         }     
    }
  
@@ -109,13 +112,22 @@ class CompletionHandler implements CompletionItemProvider
 #if DO_FULL_PATCH
 #else
     function changePatch(event:TextDocumentChangeEvent) {
-        if (server.isPatchAvailable) {
+        if (!server.isServerAvailable) {
             var changes = event.contentChanges;
             if (changes.length > 0) {
                 var document = event.document;
-                var docText = document.getText();
                 var client = server.client;
-                var patcher = client.beginPatch(document.uri.fsPath);
+                var patcher = client.cmdLine.beginPatch(document.uri.fsPath);
+                if (document.isDirty) patcher.delete(0, -1).insert(0, document.getText());
+                else patcher.remove();
+                client.sendAll(null);
+            }
+        } else if (server.isPatchAvailable) {
+            var changes = event.contentChanges;
+            if (changes.length > 0) {
+                var document = event.document;
+                var client = server.client;
+                var patcher = client.cmdLine.beginPatch(document.uri.fsPath);
                 for (change in changes) {
                     var rl = change.rangeLength;
                     var range = change.range;
@@ -128,7 +140,7 @@ class CompletionHandler implements CompletionItemProvider
                         patcher.insert(rs, text, PatcherUnit.Char);
                     }
                 }
-                client.sendAll(null, null); 
+                client.sendAll(null); 
             }
         }
     }
@@ -143,10 +155,12 @@ class CompletionHandler implements CompletionItemProvider
     // find last . before current position
     var line = document.lineAt(position);
     var dot_offset = 0;
-    var subline = line.text.substr(0, position.character);
-    if (subline.indexOf('.')>=0) {
-      dot_offset = subline.lastIndexOf('.') - position.character + 1;
-    }
+
+//    var subline = line.text.substr(0, position.character);
+//    if (subline.indexOf('.')>=0) {
+//      dot_offset = subline.lastIndexOf('.') - position.character + 1;
+//    }
+
     // So far we don't parse this output from the completion server:
     // <type>key : String -&gt; Bool</type>
     //else if (subline.indexOf('(')>=0) {
@@ -200,7 +214,9 @@ class CompletionHandler implements CompletionItemProvider
       
       if (!server.isServerAvailable) {
           var hs = server.make_client();
-          var patcher = hs.beginPatch(path);
+          var cl = hs.cmdLine;
+          var patcher = cl.beginPatch(path);
+
           if (isDirty) {
 #if DO_FULL_PATCH
 #else
@@ -209,17 +225,23 @@ class CompletionHandler implements CompletionItemProvider
           } else {
               patcher.remove();
           }
+          
           server.isPatchAvailable = false;
-          hs.version().sendAll(
-             function(s:Socket, data:String) {
-                var b = HaxeClient.isOptionExists("--patch", data);
-                server.isPatchAvailable=b;
-            },
-            function (s:Socket, err:Socket.Error) {
-                doRequest();
-            },
-            function (s:Socket) {
-                server.isServerAvailable=!s.hasError;
+          
+          cl.version();
+          
+          hs.sendAll(
+            function (s:Socket, message, err) {
+                var isPatchAvailable = false;
+                var isServerAvailable = true;
+                if (err != null) isServerAvailable = false;
+                else {
+                    server.isServerAvailable = true;
+                    if (message.hasError) isPatchAvailable = HaxeClient.isOptionExists(HaxePatcherCmd.name(), message.stderr[0]);
+                    else isPatchAvailable = true;
+                }
+                server.isServerAvailable = err==null;
+                server.isPatchAvailable=isPatchAvailable;
                 doRequest();
             }             
           );
@@ -231,13 +253,6 @@ class CompletionHandler implements CompletionItemProvider
                                         cancelToken:CancellationToken):CompletionItem {
     return item;
   }
-}
-
-// extern because it's created in JS below
-extern class CompletionServerData {
-  public var stdout:String;
-  public var stderr:String;
-  public var hasError:Bool;
 }
 
 @:jsRequire("net")
@@ -295,10 +310,10 @@ class CompletionServer
   }
 
   // I hacked this together in JS, Tides will likely replace
-  public function parse_items(data:CompletionServerData):Array<CompletionItem>
+  public function parse_items(data:Message):Array<CompletionItem>
   {
     var rtn = new Array<CompletionItem>();
-    var data_str = data.stderr; // Don't know why this is stderr
+    var data_str = data.stderr.join("\n"); // Don't know why this is stderr
 
     // TODO: xml parsing, for now, a hack
     //Vscode.window.showInformationMessage("Decoding: "+data_str.length);
@@ -338,54 +353,22 @@ class CompletionServer
     var hxml_file = "build.hxml"; // TODO: externalize
     var dir = this.proj_dir;
 
-    // I prototyped this in JS, and since snowkit/Tides will provide
-    // this functionality, I'll skip porting it to Haxe here.
+    var cl = client.cmdLine;
+    cl
+        .cwd(dir)
+        .custom(' $hxml_file')
+        .display(file, byte_pos, haxe.HaxeCmdLine.DisplayMode.Default);
 
-    var decode:Function;
-        
-untyped __js__('
-    decode = function decode(data) {
-      var stdout = "";
-      var stderr = "";
-      var hasError = false;
-      var i = 0;
-      var data = data.split("\\n");
-      while(i < data.length) {
-      	var line = data[i];
-      	++i;
-      	switch(line.charCodeAt(0)) {
-      	case 1:
-      		stdout += line.substr(1).split("\\x01").join("\\n");
-      		break;
-      	case 2:
-      		hasError = true;
-      		break;
-      	default:
-      		stderr += line + "\\n";
-      	}
-      }
-
-      //Vscode.window.showInformationMessage("decoded: "+(stdout.length+stderr.length)+" bytes");
-
-      return { stdout:stdout, stderr:stderr, hasError:hasError }
-    }
-');
-
-    client.cwd(dir);
-    client.custom(' $hxml_file');
-    client.display(file, byte_pos, HaxeClient.DisplayMode.Default);
     client.sendAll(
-        function (s, data) {
-        },
-        function (s, err) {
-            isServerAvailable = false;
-            err.message.displayAsError();
-            callback([]);
-        },
-        function (s) {
-            isServerAvailable = !s.hasError;
-            var data = s.datas.join("");
-            callback(parse_items(decode(data)));
+        function (s, message, err) {
+            if (err != null) {
+                isServerAvailable = false;
+                err.message.displayAsError();
+                callback([]);                
+            } else {
+                isServerAvailable = true;
+                callback(parse_items(message));
+            }
         }
     );
   }
