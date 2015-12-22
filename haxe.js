@@ -495,7 +495,7 @@ haxe_HaxePatcherCmd.prototype = {
 	,get_cmd: function() {
 		if(this.actions.length == 0) return "";
 		var tmp = this.actions.join("@");
-		var cmd = "--patch" + ("" + this.fileName + "@" + tmp + "\n");
+		var cmd = "--patch" + (" " + this.fileName + "@" + tmp + "\n");
 		return cmd;
 	}
 };

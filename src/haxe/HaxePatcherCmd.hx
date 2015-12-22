@@ -37,7 +37,7 @@ class HaxePatcherCmd {
         if (actions.length==0) return "";
  
         var tmp =  actions.join("@");
-        var cmd = name() + '$fileName@$tmp\n';
+        var cmd = name() + ' $fileName@$tmp\n';
         return cmd;
     }
 }
