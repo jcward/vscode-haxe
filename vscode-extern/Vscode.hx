@@ -233,6 +233,7 @@ extern class DefinitionProvider {
   // Methods
   public function provideDefinition(document:TextDocument, position:Position, token:CancellationToken):EitherType<Definition, Thenable<Definition>>;
 }
+@:native('Vscode.Diagnostic')
 extern class Diagnostic {
   // Constructors
   public function new(range:Range, message:String, ?severity:DiagnosticSeverity);
@@ -242,6 +243,7 @@ extern class Diagnostic {
   public var range:Range;
   public var severity:DiagnosticSeverity;
 }
+@:native('Vscode.DiagnosticCollection')
 extern class DiagnosticCollection {
   // Properties
   public var name:String;
@@ -252,6 +254,7 @@ extern class DiagnosticCollection {
   public function set(uri:Uri, diagnostics:Array<Diagnostic>):Void;
   //public function set(entries:Dynamic /* [Uri, Array<Diagnostic>][] */):Void;
 }
+@:native('Vscode.DiagnosticSeverity')
 extern class DiagnosticSeverity {
   // Enumeration members
   public static var Error;
@@ -259,6 +262,7 @@ extern class DiagnosticSeverity {
   public static var Information;
   public static var Warning;
 }
+@:native('Vscode.Disposable')
 extern class Disposable {
   // Static
   public static function from(val:Dynamic):Disposable;
@@ -457,6 +461,7 @@ extern class ParameterInformation {
   public var documentation:String;
   public var label:String;
 }
+@:native('Vscode.Position')
 extern class Position {
   // Constructors
   public function new(line:Int, character:Int);
@@ -483,6 +488,7 @@ extern class QuickPickOptions {
   public var matchOnDescription:Bool;
   public var placeHolder:String;
 }
+@:native('Vscode.Range')
 extern class Range {
   // Constructors
   public function new(start:Position, end:Position);
@@ -709,6 +715,7 @@ extern class ThemableDecorationRenderOptions {
   public var overviewRulerColor:String;
   public var textDecoration:String;
 }
+@:native('Vscode.Uri')
 extern class Uri {
   // Static
   public static function file(path:String):Uri;
@@ -755,7 +762,11 @@ extern class WorkspaceSymbolProvider {
 
 // ???
 extern class SymbolInformation { }
-extern class DecorationOptions { }
+//extern class DecorationOptions { }
+typedef DecorationOptions = {
+    ?hoverMessage:String,
+    range:Range,
+};
 
 extern class ExtensionContext {
 	var subscriptions(default,null):Array<Disposable>;

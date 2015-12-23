@@ -6,6 +6,7 @@ import haxe.HaxePatcherCmd;
 import haxe.HaxePatcherCmd.PatcherUnit;
 import haxe.HaxeClient;
 import haxe.HaxeClient.Message;
+import haxe.HaxeClient.MessageSeverity;
 using Tool;
 
 /*
@@ -14,28 +15,92 @@ using Tool;
 */
 
 class Main {
+    static var decoration:decorator.HaxeDecoration;
 
 	@:expose("activate")
 	static function main(context:ExtensionContext) {
 
-    test_register_command(context);
+        decoration = new decorator.HaxeDecoration();
+        
+        var diagnostic =  Vscode.languages.createDiagnosticCollection('haxe');
+        context.subscriptions.push(untyped diagnostic);
 
-    //test_register_hover(context);
-    //test_register_hover_thenable(context);
+        test_register_command(context);
 
-    var server = new CompletionServer(Vscode.workspace.rootPath);
-    var handler = new CompletionHandler(server, context);
+        //test_register_hover(context);
+        //test_register_hover_thenable(context);
 
-    // TODO: server implements Disposable
-    context.subscriptions.push(untyped {
-      dispose:function() {
-        Vscode.window.showInformationMessage("Got dispose!");
-        //TODO: server.kill();
-      }
-    });
+        function applyCurrentDecorations(message:haxe.Message) {
+            diagnostic.clear();
+
+            var all = new Map<String, Null<Array<Diagnostic>>>();            
+            for (info in message.infos) {
+                var diags = all.get(info.fileName);
+                if (diags == null) {
+                    diags = [];
+                    all.set(info.fileName, diags);
+                }
+                var diag = new Diagnostic(info.toVSCRange(), info.message, message.severity.toVSCSeverity());
+                diags.push(diag);
+            }
+            var entries:Array<Dynamic> = [];
+            for (fileName in all.keys()) {
+                var diags = all.get(fileName);
+                var url = Uri.file(fileName);
+                if (diags==null) {
+                    diagnostic.set(url, []);
+                    continue;
+                }
+                diagnostic.set(url, diags);
+            }
+            //applyDecorations(Vscode.window.activeTextEditor, message.infos, message.severity == haxe.HaxeClient.MessageSeverity.Error);
+        }
+
+        var server = new CompletionServer(Vscode.workspace.rootPath, diagnostic, applyCurrentDecorations);
+        var handler = new CompletionHandler(server, context, diagnostic, applyCurrentDecorations);
+
+        function dispose(){
+ //               Vscode.window.showInformationMessage("Got dispose!");
+            if (server.isServerAvailable && server.isPatchAvailable) {
+                var client= server.client;
+                client.clear();
+                var cl = client.cmdLine;
+                for (editor in Vscode.window.visibleTextEditors) {
+                    cl.beginPatch(editor.document.uri.fsPath).remove();
+                }
+                client.sendAll(null);
+            }
+                //TODO: server.kill();            
+        }
+
+        // TODO: server implements Disposable
+        context.subscriptions.push( untyped {
+            dispose:dispose
+        });
 
 		//Vscode.window.showInformationMessage("Haxe language support loaded!");
 	}
+  
+    static function applyDecorations(editor, infos:Array<haxe.Info>, isError:Bool) {
+        if (editor==null) return;
+        var document = editor.document;
+        var path = document.uri.fsPath;
+        var lineErrors = [];
+        var charErrors = [];
+        for (info in infos) {
+            if (info.fileName == path) {
+                var re = info.toVSCRange();
+                var r = info.range;
+                if (r.isLineRange) {
+                    if (isError) lineErrors.push({hoverMessage:info.message, range:re});
+                } else {
+                    if (isError) charErrors.push({hoverMessage:info.message, range:re});
+                }
+            }
+        }
+        editor.setDecorations(decoration.errorLineDecoration, lineErrors);
+        editor.setDecorations(decoration.errorCharDecoration, charErrors);
+    }
 
   static function test_register_command(context:ExtensionContext):Void
   {
@@ -86,21 +151,41 @@ class CompletionHandler implements CompletionItemProvider
 {
   var server:CompletionServer;
   
+  var decorator:Null<Message->Void>;
+  
+#if DO_FULL_PATCH
+#else
+  var changeDebouncer:Tool.Debouncer<TextDocumentChangeEvent>;
+#end
+  
   public function new(server:CompletionServer,
-                      context:ExtensionContext):Void
+                      context:ExtensionContext,
+                      diagnostic:DiagnosticCollection,
+                      ?decorator:Null<Message->Void>=null
+                      ):Void
   {
     this.server = server;
-        
+    this.decorator = decorator;
+     
     // Test hover code
 	var disposable = Vscode.languages.registerCompletionItemProvider('haxe', this, '.');
     context.subscriptions.push(disposable);
-    
+
+#if DO_FULL_PATCH
+#else  
+    changeDebouncer = new Tool.Debouncer<TextDocumentChangeEvent>(100, changePatchs);
+#end
+
     function removePatch(document) {
        if (server.isPatchAvailable) {
           var path:String = document.uri.fsPath;
-          var client = server.client;
+          var client = server.make_client();
           client.cmdLine.beginPatch(path).remove();
-          client.sendAll(null);         
+          client.sendAll(null);
+          var activeEditor = Vscode.window.activeTextEditor;
+          if (activeEditor.document==document) {
+              decorator({stdout:[], stderr:[], infos:[], severity:MessageSeverity.Error});
+          }
         }     
    }
  
@@ -108,45 +193,84 @@ class CompletionHandler implements CompletionItemProvider
     context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument(removePatch));    
     context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument(removePatch));
     context.subscriptions.push(Vscode.workspace.onDidCloseTextDocument(removePatch));
-    
+
 #if DO_FULL_PATCH
 #else
-    function changePatch(event:TextDocumentChangeEvent) {
-        if (!server.isServerAvailable) {
+    context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument(changePatch));
+#end    
+  }
+
+#if DO_FULL_PATCH
+#else
+    function changePatchs(events:Array<TextDocumentChangeEvent>) {
+        var client = server.make_client();
+        
+        var cl = client.cmdLine;
+            cl
+                .cwd(server.proj_dir)
+                .hxml(server.hxml_file);
+
+        var done = new Map<String, Bool>();
+        var changed = false;        
+        for (event in events) {
             var changes = event.contentChanges;
-            if (changes.length > 0) {
-                var document = event.document;
-                var client = server.client;
-                var patcher = client.cmdLine.beginPatch(document.uri.fsPath);
-                if (document.isDirty) patcher.delete(0, -1).insert(0, document.getText());
+            if (changes.length == 0) continue;
+            
+            var editor = Vscode.window.activeTextEditor;
+
+            var document = event.document;
+            var path = document.uri.fsPath;
+            var len = path.length;
+            
+            if (document.languageId != "haxe") continue;
+            
+            var text = document.getText();
+            
+            var patcher = cl.beginPatch(path);
+                            
+            if (!server.isServerAvailable) {
+                if (done.get(path)) continue;
+                done.set(path, true);
+
+                if (document.isDirty) patcher.delete(0, -1).insert(0, text);
                 else patcher.remove();
-                client.sendAll(null);
-            }
-        } else if (server.isPatchAvailable) {
-            var changes = event.contentChanges;
-            if (changes.length > 0) {
-                var document = event.document;
-                var client = server.client;
-                var patcher = client.cmdLine.beginPatch(document.uri.fsPath);
+                
+                cl.display(path, text.byteLength(), haxe.HaxeCmdLine.DisplayMode.Position);
+                
+                changed = true;
+            } else if (server.isPatchAvailable) {
                 for (change in changes) {
                     var rl = change.rangeLength;
                     var range = change.range;
                     var rs = document.offsetAt(range.start);
-                    if (change.rangeLength > 0) {
-                        patcher.delete(rs, rl, PatcherUnit.Char);
-                    }
+                    if (rl > 0) patcher.delete(rs, rl, PatcherUnit.Char);
                     var text = change.text;
-                    if (text != "") {
-                        patcher.insert(rs, text, PatcherUnit.Char);
-                    }
+                    if (text != "") patcher.insert(rs, text, PatcherUnit.Char);
                 }
-                client.sendAll(null); 
-            }
+                
+                var pos =0;
+                if (editor != null) {
+                    if (editor.document == document) pos = Tool.byte_pos(text, document.offsetAt(editor.selection.active));
+                    else pos = text.byteLength();
+                } else {
+                    pos = text.byteLength();                
+                }
+                cl.display(path, pos, haxe.HaxeCmdLine.DisplayMode.Position);
+                changed = true;
+            } 
         }
+        
+        if (changed)
+            client.sendAll(function (s, message, error) {
+                if (error==null) decorator(message);        
+            });
     }
-    context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument(changePatch));
+    function changePatch(event:TextDocumentChangeEvent) {
+        if (event.contentChanges.length==0) return;
+        changeDebouncer.debounce(event);
+    }
 #end
-  }
+
 
   public function provideCompletionItems(document:TextDocument,
                                          position:Position,
@@ -167,8 +291,8 @@ class CompletionHandler implements CompletionItemProvider
     //  dot_offset = subline.lastIndexOf('(') - position.character + 1;
     //}
 
-    var byte_pos = document.offsetAt(position) + dot_offset;
-    byte_pos = document.getText().substr(0, byte_pos).byteLength();
+    var byte_pos = Tool.byte_pos(document.getText(), document.offsetAt(position) + dot_offset);
+
     var path:String = document.uri.fsPath;
 
 		//Vscode.window.showInformationMessage("C: "+byte_pos);
@@ -201,7 +325,7 @@ class CompletionHandler implements CompletionItemProvider
                 make_request();
             }
 #else
-            make_request();
+            changeDebouncer.whenDone(make_request);
 #end
         } else {
             if (isDirty && server.isServerAvailable) {
@@ -237,7 +361,8 @@ class CompletionHandler implements CompletionItemProvider
                 if (err != null) isServerAvailable = false;
                 else {
                     server.isServerAvailable = true;
-                    if (message.hasError) isPatchAvailable = HaxeClient.isOptionExists(HaxePatcherCmd.name(), message.stderr[0]);
+                    if (message.severity==MessageSeverity.Error)
+                        isPatchAvailable = HaxeClient.isOptionExists(HaxePatcherCmd.name(), message.stderr[0]);
                     else isPatchAvailable = true;
                 }
                 server.isServerAvailable = err==null;
@@ -271,6 +396,7 @@ class CompletionServer
   public var host(default, null):String;
   public var port(default, null):Int;
   public var proj_dir(default, null):String;
+  public var hxml_file(default, null):String;
   
   public var client(default, null):HaxeClient;
   
@@ -279,16 +405,22 @@ class CompletionServer
   
   public inline function make_client() return new HaxeClient(host, port);
   
-  public function new(proj_dir:String):Void
+  public var decorator:Null<Message->Void>;
+  
+  public function new(proj_dir:String, diagnostic:DiagnosticCollection, ?decorator:Null<Message->Void>=null):Void
   {
     this.proj_dir = proj_dir;
     
+    hxml_file = "build.hxml"; // TODO: externalize
+     
     host = "127.0.0.1";
     
     port = 6000; //INST_PORT++;
 
     isServerAvailable = false;
     isPatchAvailable = false;
+    
+    this.decorator = decorator;
     
     client = make_client();
 
@@ -313,6 +445,10 @@ class CompletionServer
   public function parse_items(data:Message):Array<CompletionItem>
   {
     var rtn = new Array<CompletionItem>();
+    
+    if (decorator != null) decorator(data);
+    if (data.severity==MessageSeverity.Error) return rtn;
+    
     var data_str = data.stderr.join("\n"); // Don't know why this is stderr
 
     // TODO: xml parsing, for now, a hack
@@ -349,14 +485,10 @@ class CompletionServer
                           byte_pos:Int,
                           callback:Array<CompletionItem>->Void) {
  
- 
-    var hxml_file = "build.hxml"; // TODO: externalize
-    var dir = this.proj_dir;
-
     var cl = client.cmdLine;
     cl
-        .cwd(dir)
-        .custom(' $hxml_file')
+        .cwd(proj_dir)
+        .hxml(hxml_file)
         .display(file, byte_pos, haxe.HaxeCmdLine.DisplayMode.Default);
 
     client.sendAll(
