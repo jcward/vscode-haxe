@@ -415,7 +415,7 @@ features_CompletionHandler.prototype = {
 		if(lm == null) makeCall = true; else {
 			var ct = new Date().getTime();
 			var dlt = ct - lm;
-			if(dlt < 200) makeCall = text.charAt(char_pos - 1) == "."; else makeCall = true;
+			if(dlt < 200) makeCall = text.charAt(char_pos - 1) == ".";
 		}
 		if(!makeCall) return new Promise(function(resolve) {
 			resolve([]);

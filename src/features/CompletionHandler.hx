@@ -57,9 +57,10 @@ class CompletionHandler implements CompletionItemProvider
         var dlt = ct - lm;
         if (dlt < 200) {
             makeCall = text.charAt(char_pos-1) == '.';
-        } else {
-            makeCall = true;
-        }
+        } 
+        //else {
+        //    makeCall = true;
+        //}
     }
     
     //Vscode.window.showInformationMessage("C: "+byte_pos);
