@@ -226,10 +226,11 @@ extern class DecorationRenderOptions {
   public var overviewRulerLane:OverviewRulerLane;
   public var textDecoration:String;
 }
+@:native('Vscode.Definition')
 extern class Definition {
   public var Definition:EitherType<Location, Array<Location>>;
 }
-extern class DefinitionProvider {
+interface DefinitionProvider {
   // Methods
   public function provideDefinition(document:TextDocument, position:Position, token:CancellationToken):EitherType<Definition, Thenable<Definition>>;
 }
@@ -406,6 +407,7 @@ extern class LanguageConfiguration {
   public var onEnterRules:Array<OnEnterRule>;
   public var wordPattern:EReg;
 }
+@:native('Vscode.Location')
 extern class Location {
   // Constructors
   public function new(uri:Uri,rangeOrPosition:EitherType<Range, Position>);

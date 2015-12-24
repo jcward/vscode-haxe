@@ -2,6 +2,7 @@ import Vscode;
 import haxe.ds.Either;
 import haxe.Constraints.Function;
 
+import HaxeContext;
 import haxe.HaxeClient;
 import haxe.HaxeClient.Message;
 using Tool;

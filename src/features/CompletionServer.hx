@@ -25,7 +25,7 @@ class CompletionServer
     // TODO: disposable, stop server
     //public var host(default, null):String;
     //public var port(default, null):Int;
-    public var proj_dir(default, null):String;
+    //public var proj_dir(default, null):String;
 //    public var hxml_file(default, null):String;
     
     public var client(default, null):HaxeClient;
@@ -33,16 +33,11 @@ class CompletionServer
     public var isServerAvailable:Bool;
     public var isPatchAvailable:Bool;
     
-    public inline function make_client() return new HaxeClient('127.0.0.1', hxContext.configuration.haxeServerPort);
+    public inline function make_client() return new HaxeClient(hxContext.configuration.haxeServerHost, hxContext.configuration.haxeServerPort);
     
-    public function new(hxContext:HaxeContext, proj_dir:String):Void {
+    public function new(hxContext:HaxeContext):Void {
         this.hxContext = hxContext;
-        this.proj_dir = proj_dir;
-        
- //       hxml_file = hxContext.configuration.haxeDefaultBuildFile;
- //       host = "127.0.0.1";
- //         port = 6000; //INST_PORT++;
-        
+       
         isServerAvailable = false;
         isPatchAvailable = false;
     
@@ -118,8 +113,9 @@ class CompletionServer
         var cl = client.cmdLine;
         
         cl
-        .cwd(proj_dir)
+        .cwd(hxContext.projectDir)
         .hxml(hxContext.configuration.haxeDefaultBuildFile)
+        .noOutput()
         .display(file, byte_pos, mode);
             
         client.sendAll(function (s, message, err) {

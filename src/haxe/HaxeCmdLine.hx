@@ -55,6 +55,10 @@ class HaxeCmdLine {
         unique.set("--wait", '$port');
         return this;       
     }
+    public function noOutput() {
+        unique.set("--no-output", "");
+        return this;       
+    }    
     public function display(fileName:String, pos:Int, mode:DisplayMode) {
         var dm = switch (mode) {
             case Default: "";

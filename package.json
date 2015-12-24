@@ -65,6 +65,11 @@
                 "default": "build.hxml",
                 "description": "Name of your default build hxml file"
                 },
+                "haxe.haxeServerHost": {
+                "type": "string",
+                "default": "127.0.0.1",
+                "description": "Address of the haxe server"
+                },
                 "haxe.haxeServerPort": {
                 "type": "integer",
                 "default": 6000,

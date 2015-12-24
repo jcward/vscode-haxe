@@ -32,7 +32,7 @@ class RangeInfo {
 
 class Info {
     static var reWin = ~/^\w+:\\/;
-    static var re1 = ~/^((\w+:\\)?([^:]+)):(\d+):\s*([^:]+):(.+)/;
+    static var re1 = ~/^((\w+:\\)?([^:]+)):(\d+):\s*([^:]+)(:(.+))?/;
     static var re2 = ~/^((character[s]?)|(line[s]?))\s+(\d+)(\-(\d+))?/;
 
     public var fileName(default, null):String;
@@ -76,7 +76,7 @@ class Info {
             fn = fn.split(dps).join(ps);
         }
         var ln = Std.parseInt(re1.matched(4));
-        return {info:new Info(fn, ln, new RangeInfo(rs, re, isLine), re1.matched(6)), winDrive:wd};
+        return {info:new Info(fn, ln, new RangeInfo(rs, re, isLine), re1.matched(7)), winDrive:wd};
     }
 }
 
@@ -130,9 +130,7 @@ class HaxeClient {
         return s;
     }
     function _onConnect(s:Socket) {
-        trace(cmdLine.get_cmds());
-        s.write(cmdLine.get_cmds());
-        
+        s.write(cmdLine.get_cmds());        
         s.write("\x00");
     }
     public static function isOptionExists(optionName:String, data:String) {

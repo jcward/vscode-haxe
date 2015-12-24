@@ -30,11 +30,22 @@ var HaxeContext = function(context) {
 	haxe_HaxeConfiguration.update(this.configuration,platform_Platform.instance);
 	this.diagnostics = Vscode.languages.createDiagnosticCollection("haxe");
 	context.subscriptions.push(this.diagnostics);
-	this.server = new features_CompletionServer(this,Vscode.workspace.rootPath);
-	this.handler = new features_CompletionHandler(this);
+	this.lastModifications = new haxe_ds_StringMap();
+	this.projectDir = Vscode.workspace.rootPath;
+	this.server = new features_CompletionServer(this);
+	this.completionHandler = new features_CompletionHandler(this);
+	this.definitionHandler = new features_DefinitionHandler(this);
+	this.changeDebouncer = new Debouncer(250,$bind(this,this.changePatchs));
+	context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument($bind(this,this.changePatch)));
+	context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument($bind(this,this.removeAndDiagnoseDocument)));
+	context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument($bind(this,this.removeAndDiagnoseDocument)));
+	context.subscriptions.push(Vscode.workspace.onDidCloseTextDocument($bind(this,this.onCloseDocument)));
 	context.subscriptions.push(this);
 };
 HaxeContext.__name__ = true;
+HaxeContext.languageID = function() {
+	return "haxe";
+};
 HaxeContext.prototype = {
 	dispose: function() {
 		Vscode.window.showInformationMessage("Got dispose!");
@@ -47,6 +58,8 @@ HaxeContext.prototype = {
 			while(_g < _g1.length) {
 				var editor = _g1[_g];
 				++_g;
+				var path = editor.document.uri.fsPath;
+				this.lastModifications.remove(path);
 				cl.beginPatch(editor.document.uri.fsPath).remove();
 			}
 			client.sendAll(null);
@@ -99,6 +112,87 @@ HaxeContext.prototype = {
 			}
 			this.diagnostics.set(url,diags1);
 		}
+	}
+	,onCloseDocument: function(document) {
+		var path = document.uri.fsPath;
+		this.lastModifications.remove(path);
+		if(this.server.isPatchAvailable) {
+			var client = this.server.make_client();
+			client.cmdLine.beginPatch(path).remove();
+			client.sendAll(null);
+			this.diagnostics["delete"](document.uri);
+		}
+	}
+	,removeAndDiagnoseDocument: function(document) {
+		var _g = this;
+		this.diagnostics["delete"](document.uri);
+		var path = document.uri.fsPath;
+		this.lastModifications.remove(path);
+		var client = this.server.make_client();
+		var cl = client.cmdLine.cwd(this.projectDir).hxml(this.configuration.haxeDefaultBuildFile).noOutput();
+		if(this.server.isPatchAvailable) cl.beginPatch(path).remove();
+		client.sendAll(function(s,message,err) {
+			if(err != null) Vscode.window.showErrorMessage(err.message); else _g.applyDiagnostics(message);
+		});
+	}
+	,changePatchs: function(events) {
+		var _g = this;
+		var client = this.server.make_client();
+		var cl = client.cmdLine.cwd(this.projectDir);
+		var done = new haxe_ds_StringMap();
+		var changed = false;
+		var _g1 = 0;
+		while(_g1 < events.length) {
+			var event = events[_g1];
+			++_g1;
+			var changes = event.contentChanges;
+			if(changes.length == 0) continue;
+			var editor = Vscode.window.activeTextEditor;
+			var document = event.document;
+			var path = document.uri.fsPath;
+			var len = path.length;
+			if(document.languageId != "haxe") continue;
+			var text = document.getText();
+			var patcher = cl.beginPatch(path);
+			if(!this.server.isServerAvailable) {
+				if(__map_reserved[path] != null?done.getReserved(path):done.h[path]) continue;
+				if(__map_reserved[path] != null) done.setReserved(path,true); else done.h[path] = true;
+				var bl = js_node_buffer_Buffer.byteLength(text);
+				if(document.isDirty) patcher["delete"](0,-1).insert(0,bl,text); else patcher.remove();
+				changed = true;
+			} else if(this.server.isPatchAvailable) {
+				var _g11 = 0;
+				while(_g11 < changes.length) {
+					var change = changes[_g11];
+					++_g11;
+					var rl = change.rangeLength;
+					var range = change.range;
+					var rs = document.offsetAt(range.start);
+					if(rl > 0) patcher["delete"](rs,rl,"c");
+					var text1 = change.text;
+					if(text1 != "") patcher.insert(rs,text1.length,text1,"c");
+				}
+				var pos = 0;
+				if(editor != null) {
+					if(editor.document == document) pos = Tool.byte_pos(text,document.offsetAt(editor.selection.active)); else pos = js_node_buffer_Buffer.byteLength(text);
+				} else pos = js_node_buffer_Buffer.byteLength(text);
+				changed = true;
+			}
+		}
+		if(changed) client.sendAll(function(s,message,error) {
+			if(error == null) _g.applyDiagnostics(message);
+		});
+	}
+	,changePatch: function(event) {
+		var document = event.document;
+		var path = document.uri.fsPath;
+		if(event.contentChanges.length == 0) {
+			this.lastModifications.remove(path);
+			return;
+		}
+		var value = new Date().getTime();
+		this.lastModifications.set(path,value);
+		this.changeDebouncer.debounce(event);
 	}
 };
 var HxOverrides = function() { };
@@ -278,112 +372,33 @@ Debouncer.prototype = {
 var Vscode = require("vscode");
 var CompletionItemProvider = function() { };
 CompletionItemProvider.__name__ = true;
+var DefinitionProvider = function() { };
+DefinitionProvider.__name__ = true;
 var features_CompletionHandler = function(hxContext) {
 	this.hxContext = hxContext;
 	var context = hxContext.context;
-	this.lastModifications = new haxe_ds_StringMap();
 	var disposable = Vscode.languages.registerCompletionItemProvider("haxe",this,".");
 	context.subscriptions.push(disposable);
-	this.changeDebouncer = new Debouncer(250,$bind(this,this.changePatchs));
-	context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument($bind(this,this.removePatch)));
-	context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument($bind(this,this.removePatch)));
-	context.subscriptions.push(Vscode.workspace.onDidCloseTextDocument($bind(this,this.removePatch)));
-	context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument($bind(this,this.changePatch)));
 };
 features_CompletionHandler.__name__ = true;
 features_CompletionHandler.__interfaces__ = [CompletionItemProvider];
 features_CompletionHandler.prototype = {
-	removePatch: function(document) {
-		var server = this.hxContext.server;
-		var path = document.uri.fsPath;
-		this.lastModifications.remove(path);
-		if(server.isPatchAvailable) {
-			var client = new haxe_HaxeClient("127.0.0.1",server.hxContext.configuration.haxeServerPort);
-			client.cmdLine.beginPatch(path).remove();
-			client.sendAll(null);
-			this.hxContext.diagnostics["delete"](document.uri);
-		}
-	}
-	,changePatchs: function(events) {
-		var _g = this;
-		var server = this.hxContext.server;
-		var client = new haxe_HaxeClient("127.0.0.1",server.hxContext.configuration.haxeServerPort);
-		var cl = client.cmdLine.cwd(server.proj_dir);
-		var done = new haxe_ds_StringMap();
-		var changed = false;
-		var _g1 = 0;
-		while(_g1 < events.length) {
-			var event = events[_g1];
-			++_g1;
-			var changes = event.contentChanges;
-			if(changes.length == 0) continue;
-			var editor = Vscode.window.activeTextEditor;
-			var document = event.document;
-			var path = document.uri.fsPath;
-			var len = path.length;
-			if(document.languageId != "haxe") continue;
-			var text = document.getText();
-			var patcher = cl.beginPatch(path);
-			if(!server.isServerAvailable) {
-				if(__map_reserved[path] != null?done.getReserved(path):done.h[path]) continue;
-				if(__map_reserved[path] != null) done.setReserved(path,true); else done.h[path] = true;
-				var bl = js_node_buffer_Buffer.byteLength(text);
-				if(document.isDirty) patcher["delete"](0,-1).insert(0,bl,text); else patcher.remove();
-				changed = true;
-			} else if(server.isPatchAvailable) {
-				var _g11 = 0;
-				while(_g11 < changes.length) {
-					var change = changes[_g11];
-					++_g11;
-					var rl = change.rangeLength;
-					var range = change.range;
-					var rs = document.offsetAt(range.start);
-					if(rl > 0) patcher["delete"](rs,rl,"c");
-					var text1 = change.text;
-					if(text1 != "") patcher.insert(rs,text1.length,text1,"c");
-				}
-				var pos = 0;
-				if(editor != null) {
-					if(editor.document == document) pos = Tool.byte_pos(text,document.offsetAt(editor.selection.active)); else pos = js_node_buffer_Buffer.byteLength(text);
-				} else pos = js_node_buffer_Buffer.byteLength(text);
-				changed = true;
-			}
-		}
-		if(changed) client.sendAll(function(s,message,error) {
-			if(error == null) _g.hxContext.applyDiagnostics(message);
-		});
-	}
-	,changePatch: function(event) {
-		var document = event.document;
-		var path = document.uri.fsPath;
-		if(event.contentChanges.length == 0) {
-			this.lastModifications.remove(path);
-			return;
-		}
-		var value = new Date().getTime();
-		this.lastModifications.set(path,value);
-		this.changeDebouncer.debounce(event);
-	}
-	,provideCompletionItems: function(document,position,cancelToken) {
-		var _g = this;
+	provideCompletionItems: function(document,position,cancelToken) {
+		var changeDebouncer = this.hxContext.changeDebouncer;
 		var server = this.hxContext.server;
 		var line = document.lineAt(position);
-		var dot_offset = 0;
-		console.log(document);
-		console.log(position);
-		console.log(line);
-		console.log(cancelToken);
 		var text = document.getText();
-		var char_pos = document.offsetAt(position) + dot_offset;
+		var char_pos = document.offsetAt(position);
 		var path = document.uri.fsPath;
-		var lm = this.lastModifications.get(path);
-		this.lastModifications.set(path,null);
+		var lastModifications = this.hxContext.lastModifications;
+		var lm;
+		lm = __map_reserved[path] != null?lastModifications.getReserved(path):lastModifications.h[path];
+		if(__map_reserved[path] != null) lastModifications.setReserved(path,null); else lastModifications.h[path] = null;
 		var makeCall = false;
 		var displayMode = haxe_DisplayMode.Default;
 		if(lm == null) makeCall = true; else {
 			var ct = new Date().getTime();
 			var dlt = ct - lm;
-			console.log(dlt);
 			if(dlt < 200) makeCall = text.charAt(char_pos - 1) == "."; else makeCall = true;
 		}
 		if(!makeCall) return new Promise(function(resolve) {
@@ -402,10 +417,10 @@ features_CompletionHandler.prototype = {
 			var isDirty = document.isDirty;
 			var client = server.client;
 			var doRequest = function() {
-				if(server.isPatchAvailable) _g.changeDebouncer.whenDone(make_request); else if(isDirty && server.isServerAvailable) document.save().then(make_request); else make_request();
+				if(server.isPatchAvailable) changeDebouncer.whenDone(make_request); else if(isDirty && server.isServerAvailable) document.save().then(make_request); else make_request();
 			};
 			if(!server.isServerAvailable) {
-				var hs = new haxe_HaxeClient("127.0.0.1",server.hxContext.configuration.haxeServerPort);
+				var hs = new haxe_HaxeClient(server.hxContext.configuration.haxeServerHost,server.hxContext.configuration.haxeServerPort);
 				var cl = hs.cmdLine;
 				var patcher = cl.beginPatch(path);
 				if(isDirty) {
@@ -432,13 +447,12 @@ features_CompletionHandler.prototype = {
 		return item;
 	}
 };
-var features_CompletionServer = function(hxContext,proj_dir) {
+var features_CompletionServer = function(hxContext) {
 	var _g = this;
 	this.hxContext = hxContext;
-	this.proj_dir = proj_dir;
 	this.isServerAvailable = false;
 	this.isPatchAvailable = false;
-	this.client = new haxe_HaxeClient("127.0.0.1",this.hxContext.configuration.haxeServerPort);
+	this.client = new haxe_HaxeClient(this.hxContext.configuration.haxeServerHost,this.hxContext.configuration.haxeServerPort);
 	this.client.isPatchAvailable(function(data) {
 		_g.isPatchAvailable = data.isOptionAvailable;
 		_g.isServerAvailable = data.isServerAvailable;
@@ -447,7 +461,7 @@ var features_CompletionServer = function(hxContext,proj_dir) {
 features_CompletionServer.__name__ = true;
 features_CompletionServer.prototype = {
 	make_client: function() {
-		return new haxe_HaxeClient("127.0.0.1",this.hxContext.configuration.haxeServerPort);
+		return new haxe_HaxeClient(this.hxContext.configuration.haxeServerHost,this.hxContext.configuration.haxeServerPort);
 	}
 	,parse_items: function(data) {
 		var rtn = [];
@@ -483,7 +497,7 @@ features_CompletionServer.prototype = {
 	,request: function(file,byte_pos,mode,callback) {
 		var _g = this;
 		var cl = this.client.cmdLine;
-		cl.cwd(this.proj_dir).hxml(this.hxContext.configuration.haxeDefaultBuildFile).display(file,byte_pos,mode);
+		cl.cwd(this.hxContext.projectDir).hxml(this.hxContext.configuration.haxeDefaultBuildFile).noOutput().display(file,byte_pos,mode);
 		this.client.sendAll(function(s,message,err) {
 			if(err != null) {
 				_g.isServerAvailable = false;
@@ -493,6 +507,103 @@ features_CompletionServer.prototype = {
 				_g.isServerAvailable = true;
 				callback(_g.parse_items(message));
 			}
+		});
+	}
+};
+var features_DefinitionHandler = function(hxContext) {
+	this.hxContext = hxContext;
+	var context = hxContext.context;
+	var disposable = Vscode.languages.registerDefinitionProvider("haxe",this);
+	context.subscriptions.push(disposable);
+};
+features_DefinitionHandler.__name__ = true;
+features_DefinitionHandler.__interfaces__ = [DefinitionProvider];
+features_DefinitionHandler.prototype = {
+	provideDefinition: function(document,position,cancelToken) {
+		var _g = this;
+		var changeDebouncer = this.hxContext.changeDebouncer;
+		var server = this.hxContext.server;
+		var path = document.uri.fsPath;
+		var lastModifications = this.hxContext.lastModifications;
+		var lm;
+		lm = __map_reserved[path] != null?lastModifications.getReserved(path):lastModifications.h[path];
+		if(__map_reserved[path] != null) lastModifications.setReserved(path,null); else lastModifications.h[path] = null;
+		var makeCall = false;
+		var displayMode = haxe_DisplayMode.Position;
+		if(lm == null) makeCall = true; else {
+			var ct = new Date().getTime();
+			var dlt = ct - lm;
+			if(dlt > 200) makeCall = true;
+		}
+		if(!makeCall) return new Promise(function(resolve) {
+			resolve(null);
+		});
+		var text = document.getText();
+		var range = document.getWordRangeAtPosition(position);
+		position = range.end;
+		var char_pos = document.offsetAt(position) + 1;
+		var byte_pos;
+		if(char_pos == text.length) byte_pos = js_node_buffer_Buffer.byteLength(text); else byte_pos = Tool.byteLength(HxOverrides.substr(text,0,char_pos));
+		return new Promise(function(resolve1) {
+			var make_request = function() {
+				var client = new haxe_HaxeClient(server.hxContext.configuration.haxeServerHost,server.hxContext.configuration.haxeServerPort);
+				var cl = client.cmdLine.cwd(_g.hxContext.projectDir).hxml(_g.hxContext.configuration.haxeDefaultBuildFile).noOutput().display(path,byte_pos,haxe_DisplayMode.Position);
+				client.sendAll(function(s,message,err) {
+					if(err != null) {
+						Vscode.window.showErrorMessage(err.message);
+						resolve1(null);
+					} else if(message.severity == 2) {
+						_g.hxContext.applyDiagnostics(message);
+						resolve1(null);
+					} else {
+						var datas = message.stderr;
+						var defs = [];
+						if(datas.length > 2 && datas[0] == "<list>") {
+							datas.shift();
+							datas.pop();
+							var _g1 = 0;
+							while(_g1 < datas.length) {
+								var data = datas[_g1];
+								++_g1;
+								if(!features_DefinitionHandler.rePos.match(data)) continue;
+								data = features_DefinitionHandler.rePos.matched(1);
+								var i = haxe_Info.decode(data,_g.hxContext.projectDir);
+								if(i == null) continue;
+								var info = i.info;
+								defs.push(new Vscode.Location(Vscode.Uri.file(info.fileName),Tool.toVSCRange(info)));
+							}
+						}
+						resolve1(defs);
+					}
+				});
+			};
+			var isDirty = document.isDirty;
+			var client1 = server.client;
+			var doRequest = function() {
+				if(server.isPatchAvailable) changeDebouncer.whenDone(make_request); else if(isDirty && server.isServerAvailable) document.save().then(make_request); else make_request();
+			};
+			if(!server.isServerAvailable) {
+				var hs = new haxe_HaxeClient(server.hxContext.configuration.haxeServerHost,server.hxContext.configuration.haxeServerPort);
+				var cl1 = hs.cmdLine;
+				var patcher = cl1.beginPatch(path);
+				if(isDirty) {
+					var text1 = document.getText();
+					patcher["delete"](0,-1).insert(0,js_node_buffer_Buffer.byteLength(text1),text1);
+				} else patcher.remove();
+				server.isPatchAvailable = false;
+				cl1.version();
+				hs.sendAll(function(s1,message1,err1) {
+					var isPatchAvailable = false;
+					var isServerAvailable = true;
+					if(err1 != null) isServerAvailable = false; else {
+						server.isServerAvailable = true;
+						if(message1.severity == 2) isPatchAvailable = haxe_HaxeClient.isOptionExists("--patch",message1.stderr[0]); else isPatchAvailable = true;
+					}
+					server.isServerAvailable = err1 == null;
+					server.isPatchAvailable = isPatchAvailable;
+					doRequest();
+				});
+			} else doRequest();
 		});
 	}
 };
@@ -552,7 +663,7 @@ haxe_Info.decode = function(str,cwd) {
 		fn = fn.split(dps).join(ps);
 	}
 	var ln = Std.parseInt(haxe_Info.re1.matched(4));
-	return { info : new haxe_Info(fn,ln,new haxe_RangeInfo(rs,re,isLine),haxe_Info.re1.matched(6)), winDrive : wd};
+	return { info : new haxe_Info(fn,ln,new haxe_RangeInfo(rs,re,isLine),haxe_Info.re1.matched(7)), winDrive : wd};
 };
 var haxe_HaxeClient = function(host,port) {
 	this.host = host;
@@ -612,7 +723,6 @@ haxe_HaxeClient.prototype = {
 		return s;
 	}
 	,_onConnect: function(s) {
-		console.log(this.cmdLine.get_cmds());
 		s.write(this.cmdLine.get_cmds());
 		s.write("\x00");
 	}
@@ -680,6 +790,10 @@ haxe_HaxeCmdLine.prototype = {
 	}
 	,wait: function(port) {
 		this.unique.set("--wait","" + port);
+		return this;
+	}
+	,noOutput: function() {
+		this.unique.set("--no-output","");
 		return this;
 	}
 	,display: function(fileName,pos,mode) {
@@ -997,7 +1111,8 @@ String.__name__ = true;
 Array.__name__ = true;
 Date.__name__ = ["Date"];
 var __map_reserved = {}
+features_DefinitionHandler.rePos = new EReg("[^<]*<pos>(.+)</pos>.*","");
 haxe_Info.reWin = new EReg("^\\w+:\\\\","");
-haxe_Info.re1 = new EReg("^((\\w+:\\\\)?([^:]+)):(\\d+):\\s*([^:]+):(.+)","");
+haxe_Info.re1 = new EReg("^((\\w+:\\\\)?([^:]+)):(\\d+):\\s*([^:]+)(:(.+))?","");
 haxe_Info.re2 = new EReg("^((character[s]?)|(line[s]?))\\s+(\\d+)(\\-(\\d+))?","");
 })(typeof window != "undefined" ? window : typeof exports != "undefined" ? exports : typeof self != "undefined" ? self : this);

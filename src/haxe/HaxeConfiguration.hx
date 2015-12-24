@@ -2,7 +2,15 @@ package haxe;
 
 import platform.Platform;
 
-typedef HaxeConfigurationObject = {haxePath:String, haxelibPath:String, haxeDefaultBuildFile:String, haxeServerPort:Int, ?haxeExec:String, ?haxelibExec:String};
+typedef HaxeConfigurationObject = {
+    haxePath:String,
+    haxelibPath:String,
+    haxeDefaultBuildFile:String,
+    haxeServerHost:String,
+    haxeServerPort:Int,
+    ?haxeExec:String, // filled at runtime
+    ?haxelibExec:String // filled at runtime
+};
 
 class HaxeConfiguration {    
     public static function addTrailingSep(path:String, platform:Platform) {
