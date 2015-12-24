@@ -12,7 +12,12 @@ class Tool {
     public static inline function displayAsError(s:String) Vscode.window.showErrorMessage(s);
     public static inline function displayAsWarning(s:String) Vscode.window.showWarningMessage(s);
 #if js
-    public static inline function byteLength(str:String) return Buffer.byteLength(str);
+    public static inline function byteLength(str:String) return
+    #if (haxe_ver >= 3.3)
+        Buffer.byteLength(str);
+    #else 
+        Buffer._byteLength(str);
+    #end
     public static inline function byte_pos(text:String, char_pos:Int) return {
         if (char_pos==text.length) text.byteLength();
         else text.substr(0, char_pos).byteLength();
