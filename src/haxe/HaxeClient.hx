@@ -94,9 +94,7 @@ class HaxeClient {
     public function clear() {
         cmdLine.clear();
     }
-    public function sendAll(onClose:Null<Socket->Message->Null<Error>->Void>) {
-        cmdLine.endPatch();
-        
+    public function sendAll(onClose:Null<Socket->Message->Null<Error>->Void>) {        
         var workingDir = cmdLine.workingDir;
         
         var s = new Socket();
@@ -132,6 +130,7 @@ class HaxeClient {
         return s;
     }
     function _onConnect(s:Socket) {
+        trace(cmdLine.get_cmds());
         s.write(cmdLine.get_cmds());
         
         s.write("\x00");

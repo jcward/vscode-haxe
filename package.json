@@ -1,8 +1,8 @@
 {
 	"name": "haxe",
 	"description": "Haxe Language Extension",
-	"version": "0.0.1",
-	"publisher": "Jeff Ward & Dan Korostelev",
+	"version": "0.0.2",
+	"publisher": "Jeff Ward & Dan Korostelev & Patrick Le Clec'h",
 	"engines": {
 		"vscode": "^0.10.1"
 	},
@@ -45,6 +45,32 @@
 				"scopeName": "source.hxml",
 				"path": "./syntaxes/hxml.tmLanguage"
 			}
-		]
+		],
+        "configuration": {
+            "type": "object",
+            "title": "Haxe configuration",
+            "properties": {
+                "haxe.haxePath": {
+                "type": "string",
+                "default": "",
+                "description": "Where to find haxe executable. If not set must be in your global path"
+                },
+                "haxe.haxelibPath": {
+                "type": "string",
+                "default": "",
+                "description": "Where to find haxelib executable. If not set must be in your global path"
+                },
+                "haxe.haxeDefaultBuildFile": {
+                "type": "string",
+                "default": "build.hxml",
+                "description": "Name of your default build hxml file"
+                },
+                "haxe.haxeServerPort": {
+                "type": "integer",
+                "default": 6000,
+                "description": "Port number of the haxe server"
+                }
+            }
+        }
 	}
 }

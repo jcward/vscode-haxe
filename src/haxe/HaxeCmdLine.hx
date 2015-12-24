@@ -12,14 +12,13 @@ enum DisplayMode {
     Resolve(v:String);
 }
 
-typedef CmdLineStackItem = {cmds:Array<String>, patcher:Null<Patcher>, unique:Map<String, String>}
+typedef CmdLineStackItem = {cmds:Array<String>, patchers:Map<String, Patcher>, unique:Map<String, String>}
 
 class HaxeCmdLine {
     var cmds(default, null):Array<String>;
     var unique(default, null):Map<String, String>;
-    var patcher(default, null):Null<Patcher>;
     var stack:Array<CmdLineStackItem>;
-    
+    var patchers:Map<String, Patcher>;
     public var workingDir(default, null):String;
      
     public function new() {
@@ -29,7 +28,7 @@ class HaxeCmdLine {
         cmds = [];
         unique = new Map<String, String>();
         workingDir = "";
-        patcher = null;
+        patchers = new Map<String, Patcher>();
     }
     public function reset() {
         stack = [];
@@ -74,30 +73,28 @@ class HaxeCmdLine {
         return this;
     }
     public function beginPatch(fileName:String) {
-        endPatch();
-        patcher = new Patcher(fileName);
-        return patcher; 
-    }
-    public function endPatch() {
-        if (patcher != null) {
-            cmds.push(patcher.get_cmd());
-            patcher = null;
-        }
+        var tmp = patchers.get(fileName);
+        if (tmp == null) tmp = new Patcher(fileName);
+        patchers.set(fileName, tmp);
+        return tmp; 
     }
     public function save() {
-        stack.push({cmds:cmds, patcher:patcher, unique:unique});
+        stack.push({cmds:cmds, patchers:patchers, unique:unique});
         clear();
     }
     public function restore() {
         var i = stack.pop();
         cmds = i.cmds;
-        patcher = i.patcher;
+        patchers = i.patchers;
         unique = i.unique;
     }
     public function get_cmds() {
         var cmds = cmds.concat([]);
         for (key in unique.keys()) {
             cmds.push(key+" " +unique.get(key));
+        }
+        for (key in patchers.keys()) {
+            cmds.push(patchers.get(key).get_cmd());            
         }
         return cmds.join("\n");
     }
