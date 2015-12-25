@@ -47,8 +47,16 @@ class HaxePatcherCmd {
         if (pendingOP == null) pendingOP = {unit:unit, op:op, pos:pos, len:len};
         else {
             // we try to group successive delete
-            if (pendingOP.op==op && pendingOP.unit==unit && pendingOP.pos==pos) pendingOP.len += len;
-            else {
+            if (pendingOP.op==op && pendingOP.unit==unit) {
+                if (pendingOP.pos==pos) pendingOP.len += len;
+                else if (pendingOP.pos==(pos+len)) {
+                    pendingOP.len += len;
+                    pendingOP.pos = pos;
+                } else {
+                    actions.push(opToString(pendingOP));
+                    pendingOP = {unit:unit, op:op, pos:pos, len:len};
+                }
+            } else {
                 actions.push(opToString(pendingOP));
                 pendingOP = {unit:unit, op:op, pos:pos, len:len};
             }
@@ -61,9 +69,17 @@ class HaxePatcherCmd {
         if (pendingOP == null) pendingOP = {unit:unit, op:op, pos:pos, len:len, content:text};
         else {
             // we try to group successive insert
-            if (pendingOP.op==op && pendingOP.unit==unit && (pendingOP.pos+pendingOP.len)==pos) {
-                pendingOP.len += len;
-                pendingOP.content += text;
+            if (pendingOP.op==op && pendingOP.unit==unit) {
+                if ((pendingOP.pos+pendingOP.len)==pos) {
+                    pendingOP.len += len;
+                    pendingOP.content += text;
+                } else if (pendingOP.pos==pos) {
+                    pendingOP.len += len;
+                    pendingOP.content = text + pendingOP.content;
+                } else {
+                    actions.push(opToString(pendingOP));
+                    pendingOP = {unit:unit, op:op, pos:pos, len:len, content:text};                    
+                }
             }
             else {
                 actions.push(opToString(pendingOP));

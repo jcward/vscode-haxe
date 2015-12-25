@@ -748,6 +748,7 @@ haxe_HaxeClient.prototype = {
 		return s;
 	}
 	,_onConnect: function(s) {
+		console.log(this.cmdLine.get_cmds());
 		s.write(this.cmdLine.get_cmds());
 		s.write("\x00");
 	}
@@ -930,20 +931,38 @@ haxe_HaxePatcherCmd.prototype = {
 		return this;
 	}
 	,'delete': function(pos,len,unit) {
+		console.log("delete " + pos + "-" + len);
 		if(unit == null) unit = "b";
 		var op = "-";
-		if(this.pendingOP == null) this.pendingOP = { unit : unit, op : op, pos : pos, len : len}; else if(this.pendingOP.op == op && this.pendingOP.unit == unit && this.pendingOP.pos == pos) this.pendingOP.len += len; else {
+		if(this.pendingOP == null) this.pendingOP = { unit : unit, op : op, pos : pos, len : len}; else if(this.pendingOP.op == op && this.pendingOP.unit == unit) {
+			if(this.pendingOP.pos == pos) this.pendingOP.len += len; else if(this.pendingOP.pos == pos + len) {
+				this.pendingOP.len += len;
+				this.pendingOP.pos = pos;
+			} else {
+				this.actions.push(haxe_HaxePatcherCmd.opToString(this.pendingOP));
+				this.pendingOP = { unit : unit, op : op, pos : pos, len : len};
+			}
+		} else {
 			this.actions.push(haxe_HaxePatcherCmd.opToString(this.pendingOP));
 			this.pendingOP = { unit : unit, op : op, pos : pos, len : len};
 		}
 		return this;
 	}
 	,insert: function(pos,len,text,unit) {
+		console.log("insert " + pos + "-" + len + " " + text);
 		if(unit == null) unit = "b";
 		var op = "+";
-		if(this.pendingOP == null) this.pendingOP = { unit : unit, op : op, pos : pos, len : len, content : text}; else if(this.pendingOP.op == op && this.pendingOP.unit == unit && this.pendingOP.pos + this.pendingOP.len == pos) {
-			this.pendingOP.len += len;
-			this.pendingOP.content += text;
+		if(this.pendingOP == null) this.pendingOP = { unit : unit, op : op, pos : pos, len : len, content : text}; else if(this.pendingOP.op == op && this.pendingOP.unit == unit) {
+			if(this.pendingOP.pos + this.pendingOP.len == pos) {
+				this.pendingOP.len += len;
+				this.pendingOP.content += text;
+			} else if(this.pendingOP.pos == pos) {
+				this.pendingOP.len += len;
+				this.pendingOP.content = text + this.pendingOP.content;
+			} else {
+				this.actions.push(haxe_HaxePatcherCmd.opToString(this.pendingOP));
+				this.pendingOP = { unit : unit, op : op, pos : pos, len : len, content : text};
+			}
 		} else {
 			this.actions.push(haxe_HaxePatcherCmd.opToString(this.pendingOP));
 			this.pendingOP = { unit : unit, op : op, pos : pos, len : len, content : text};
