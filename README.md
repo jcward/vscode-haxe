@@ -4,6 +4,7 @@ Haxe language extension for Visual Studio Code
 This extension provides:
 - Syntax highlighting for .hx and .hxml
 - Code completion (ALPHA / EXPERIMENTAL, see below)
+- Jump / peek definition (ctrl-click / ctrl-hover)
 
 <img src="https://lh3.googleusercontent.com/-ekHamgDiuZM/VnOd05QH04I/AAAAAAAAO4I/cfu718KBlO8/s1600/test.gif" width=400>
 
