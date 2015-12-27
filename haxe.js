@@ -52,7 +52,7 @@ HaxeContext.prototype = {
 			_g.server = new features_CompletionServer(_g);
 			_g.completionHandler = new features_CompletionHandler(_g);
 			_g.definitionHandler = new features_DefinitionHandler(_g);
-			Vscode.window.showInformationMessage("Using server at " + _g.configuration.haxeServerHost + " on port " + port);
+			Vscode.window.showInformationMessage("Using " + (_g.server.isPatchAvailable?"--patch":"non-patching") + " completion server at " + _g.configuration.haxeServerHost + " on port " + port);
 			return port;
 		});
 	}

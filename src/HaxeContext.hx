@@ -78,7 +78,7 @@ class HaxeContext  {
             completionHandler = new CompletionHandler(this);
             definitionHandler = new DefinitionHandler(this);     
             
-            'Using server at ${configuration.haxeServerHost} on port $port'.displayAsInfo();
+            'Using ${ server.isPatchAvailable ? "--patch" : "non-patching" } completion server at ${configuration.haxeServerHost} on port $port'.displayAsInfo();
 
             return port;     
       });
