@@ -7,6 +7,7 @@ This extension provides:
 - Jump / peek definition (ctrl-click / ctrl-hover)
 
 <img src="https://lh3.googleusercontent.com/-ekHamgDiuZM/VnOd05QH04I/AAAAAAAAO4I/cfu718KBlO8/s1600/test.gif" width=400>
+<img src="https://lh3.googleusercontent.com/-0cTfJGLLrpk/VoBPk4GAz_I/AAAAAAAAPKs/bWvpJBDjwnA/s400/definition_peek.gif" width=400>
 
 #Installation
 Place the vscode-haxe directory in your `.vscode/extensions` directory:
