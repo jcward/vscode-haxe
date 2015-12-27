@@ -67,14 +67,14 @@ class CompletionHandler implements CompletionItemProvider
     //Vscode.window.showInformationMessage("F: "+path);
     
     if (!makeCall)
-        return new Thenable<Array<CompletionItem>>( function(resolve:Array<CompletionItem>->Void) {resolve([]);});
+        return new Thenable<Array<CompletionItem>>(function(resolve) {resolve([]);});
 
     var isDot = text.charAt(char_pos-1) == '.';
     if (!isDot) displayMode = haxe.HaxeCmdLine.DisplayMode.Position;
 
     var byte_pos = Tool.byte_pos(text, char_pos);
 
-    return new Thenable<Array<CompletionItem>>( function(resolve:Array<CompletionItem>->Void) {
+    return new Thenable<Array<CompletionItem>>(function(resolve) {
       function make_request() {
         server.request(path,
                        byte_pos,
@@ -102,11 +102,14 @@ class CompletionHandler implements CompletionItemProvider
                 make_request();
             }
 #else
-            changeDebouncer.whenDone(make_request);
+            changeDebouncer.whenDone(function(){make_request();});
 #end
         } else {
             if (isDirty && server.isServerAvailable) {
-                document.save().then(make_request);
+                document.save().then(function (saved) {
+                    if (saved) make_request(); 
+                    else resolve([]);
+                });
             } else {
                 make_request();
             }
@@ -115,7 +118,7 @@ class CompletionHandler implements CompletionItemProvider
       
       if (!server.isServerAvailable) {
           var hs = server.make_client();
-          var cl = hs.cmdLine;
+          var cl = hs.cmdLine.version();
           var patcher = cl.beginPatch(path);
 
           if (isDirty) {
@@ -130,8 +133,6 @@ class CompletionHandler implements CompletionItemProvider
           
           server.isPatchAvailable = false;
           
-          cl.version();
-          
           hs.sendAll(
             function (s:Socket, message, err) {
                 var isPatchAvailable = false;
@@ -139,8 +140,9 @@ class CompletionHandler implements CompletionItemProvider
                 if (err != null) isServerAvailable = false;
                 else {
                     server.isServerAvailable = true;
-                    if (message.severity==MessageSeverity.Error)
-                        isPatchAvailable = HaxeClient.isOptionExists(HaxePatcherCmd.name(), message.stderr[0]);
+                    if (message.severity==MessageSeverity.Error) {
+                        if (message.stderr.length > 1) isPatchAvailable = HaxeClient.isOptionExists(HaxePatcherCmd.name(), message.stderr[1]);
+                    }
                     else isPatchAvailable = true;
                 }
                 server.isServerAvailable = err==null;

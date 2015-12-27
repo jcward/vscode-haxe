@@ -1,6 +1,7 @@
 package;
 
 import Vscode;
+import haxe.HaxeClient;
 import haxe.HaxeClient.Message;
 import haxe.HaxeClient.MessageSeverity;
 
@@ -16,6 +17,9 @@ using Tool;
 
 import haxe.HaxePatcherCmd.PatcherUnit;
 
+import js.Promise;
+import js.node.ChildProcess;
+
 class HaxeContext  {
     public static inline function languageID() return "haxe";
     
@@ -26,6 +30,7 @@ class HaxeContext  {
     public var definitionHandler(default, null):DefinitionHandler;    
     public var configuration:HaxeConfigurationObject;
     public var projectDir(default, null):String;
+    var haxeProcess:Null<js.node.child_process.ChildProcess>;
 
 #if DO_FULL_PATCH
 #else
@@ -38,39 +43,74 @@ class HaxeContext  {
 //    public var decoration(default, null):decorator.HaxeDecoration
     public function new(context:ExtensionContext) {
         this.context = context;
+        haxeProcess = null;
         
-        platform.Platform.init(js.Node.process.platform);
-
         configuration = cast Vscode.workspace.getConfiguration(languageID());
+        platform.Platform.init(js.Node.process.platform);
         configuration.update(platform.Platform.instance);
-
-        // decoration = new decorator.HaxeDecoration();
-
+        
         diagnostics =  Vscode.languages.createDiagnosticCollection(languageID());
         context.subscriptions.push(cast diagnostics);
         
         lastModifications = new Map<String, Float>();
 
-        projectDir = Vscode.workspace.rootPath;
+        context.subscriptions.push(cast this);
+    }
+    public function init() {
+        return launchServer().then(function (port) {
+            configuration.haxeServerPort = port;
+             // decoration = new decorator.HaxeDecoration();
 
-        server = new CompletionServer(this);
-        completionHandler = new CompletionHandler(this);
-        definitionHandler = new DefinitionHandler(this);
+            projectDir = Vscode.workspace.rootPath;
 
 #if DO_FULL_PATCH
 #else
-      changeDebouncer = new Debouncer<TextDocumentChangeEvent>(250, changePatchs);
-      context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument(changePatch));
+            changeDebouncer = new Debouncer<TextDocumentChangeEvent>(250, changePatchs);
+            context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument(changePatch));
 #end
 
-      // remove the patch if the document is opened, saved, or closed
-      context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument(removeAndDiagnoseDocument));    
-      context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument(removeAndDiagnoseDocument));
-      context.subscriptions.push(Vscode.workspace.onDidCloseTextDocument(onCloseDocument));
+            // remove the patch if the document is opened, saved, or closed
+            context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument(removeAndDiagnoseDocument));    
+            context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument(removeAndDiagnoseDocument));
+            context.subscriptions.push(Vscode.workspace.onDidCloseTextDocument(onCloseDocument));
 
-      context.subscriptions.push(cast this);
+            server = new CompletionServer(this);
+            completionHandler = new CompletionHandler(this);
+            definitionHandler = new DefinitionHandler(this);     
+            
+            'Using server at ${configuration.haxeServerHost} on port $port'.displayAsInfo();
+
+            return port;     
+      });
     }
-    
+    function launchServer() {
+        var host = configuration.haxeServerHost;
+        var port = configuration.haxeServerPort;
+        var client = new HaxeClient(host, port);
+        return new Promise<Int>(function (resolve, reject){
+            function onData(data) {
+                if (data.isHaxeServer) return resolve(port);
+                if (data.isServerAvailable) {
+                    port ++;
+                    client.isPatchAvailable(onData);
+                } else {
+                    if (haxeProcess!=null) haxeProcess.kill("SIGKILL");
+                    haxeProcess = ChildProcess.spawn(configuration.haxeExec, ["--wait", '$port']);
+                    if (haxeProcess.pid > 0)  {
+                        configuration.haxeServerPort = port;
+                        client.isPatchAvailable(onData);
+                    }
+                    haxeProcess.on("error", function(err){
+                        haxeProcess = null;
+                        'Can\'t spawn ${configuration.haxeExec} process'.displayAsError(); 
+                        reject(err);
+                    });
+                }
+            }
+
+            client.isPatchAvailable(onData);            
+        });
+    }
     function dispose():Dynamic {
         Vscode.window.showInformationMessage("Got dispose!");
 
@@ -85,7 +125,10 @@ class HaxeContext  {
             }
             client.sendAll(null);
         }
-        //TODO: server.kill();
+        if (haxeProcess!=null) {
+            haxeProcess.kill("SIGKILL");
+            haxeProcess = null;
+        }
         return null;
     }
    

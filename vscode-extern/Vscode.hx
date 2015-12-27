@@ -774,12 +774,14 @@ extern class ExtensionContext {
 	var subscriptions(default,null):Array<Disposable>;
 }
 
+
 @:native('Promise')
 extern class Thenable<T> {
-	public function new(resolve:Function);
-	public function then(onResolved:Function, ?onError:Function):Thenable<T>;
+	public function new(resolve:(T->Void)->Void, ?reject:(Dynamic->Void)->Void);
+	public function then(onResolved:T->Void, ?onError:Dynamic->Void):Thenable<T>;
 	//public function resolve(val:T):Thenable<T>;
 }
+
 
 // @:native('Promise')
 // extern class Thenable<T> {

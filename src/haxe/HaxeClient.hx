@@ -2,7 +2,7 @@ package haxe;
 
 import Socket.Error;
 
-typedef OptionAvailable = {isServerAvailable:Bool, isOptionAvailable:Bool};
+typedef OptionAvailable = {isServerAvailable:Bool, isOptionAvailable:Bool, isHaxeServer:Bool};
 
 @:enum abstract MessageSeverity(Int) {
     var Info = 0;
@@ -138,21 +138,31 @@ class HaxeClient {
  
         return !re.match(data);
     }
+    static var reVersion = ~/(\d+).(\d+).(\d+)(.+)?/;
+    public static function get_status(message:Message, error:Null<Error>) {
+        var isServerAvailable = true;
+        var isPatchAvailable = false;
+        var isHaxeServer = false;
+        if (error != null) isServerAvailable = false;
+        else {
+            isPatchAvailable = message.severity!=MessageSeverity.Error;
+            if (message.stderr.length>0)
+                isHaxeServer = reVersion.match(message.stderr[0]);
+        }
+        return {isServerAvailable:isServerAvailable, isOptionAvailable:isPatchAvailable, isHaxeServer:isHaxeServer};
+    }
     public function isPatchAvailable(onData:OptionAvailable->Void) {
         cmdLine.save();
         
         cmdLine
+            .version()
             .beginPatch('~.hx')
             .remove();
 
         sendAll(
             function (s:Socket, message:Message, error:Null<Error>) {
                 cmdLine.restore();
-                var isServerAvailable = true;
-                var isPatchAvailable = false;
-                if (error != null) isServerAvailable = false;
-                else isPatchAvailable = message.severity!=MessageSeverity.Error;
-                onData({isServerAvailable:isServerAvailable, isOptionAvailable:isPatchAvailable});
+                onData(get_status(message, error));
             }
         );
     }

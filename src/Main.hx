@@ -15,8 +15,8 @@ using Tool;
 class Main {
 	@:expose("activate")
 	static function main(context:ExtensionContext) {
-        
-        new HaxeContext(context);
+        var hc = new HaxeContext(context);
+        hc.init();
         
         // test_register_command(context);
 
@@ -56,7 +56,7 @@ class Main {
                                   cancelToken:CancellationToken):Thenable<Hover>
 			{
                 var s = untyped JSON.stringify(position);
-				return new Thenable<Hover>( function(resolve:Hover->Void) {
+				return new Thenable<Hover>( function(resolve) {
                     var h = new Hover('I am a thenable hover! pos: '+s);
                     resolve(h);
 				});

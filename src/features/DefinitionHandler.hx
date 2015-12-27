@@ -55,7 +55,7 @@ class DefinitionHandler implements DefinitionProvider
       }
       
       if (!makeCall)
-        return new Thenable<Definition>( function(resolve:Definition->Void) {resolve(null);});
+        return new Thenable<Definition>( function(resolve) {resolve(null);});
 
       var text = document.getText();
       var range = document.getWordRangeAtPosition(position);
@@ -120,7 +120,10 @@ class DefinitionHandler implements DefinitionProvider
 #end
         } else {
             if (isDirty && server.isServerAvailable) {
-                document.save().then(make_request);
+                document.save().then(function(saved) {
+                    if (saved) make_request();
+                    else resolve(null);
+                });
             } else {
                 make_request();
             }
@@ -129,7 +132,7 @@ class DefinitionHandler implements DefinitionProvider
       
       if (!server.isServerAvailable) {
           var hs = server.make_client();
-          var cl = hs.cmdLine;
+          var cl = hs.cmdLine.version();
           var patcher = cl.beginPatch(path);
 
           if (isDirty) {
@@ -144,8 +147,6 @@ class DefinitionHandler implements DefinitionProvider
           
           server.isPatchAvailable = false;
           
-          cl.version();
-          
           hs.sendAll(
             function (s:Socket, message, err) {
                 var isPatchAvailable = false;
@@ -153,8 +154,9 @@ class DefinitionHandler implements DefinitionProvider
                 if (err != null) isServerAvailable = false;
                 else {
                     server.isServerAvailable = true;
-                    if (message.severity==MessageSeverity.Error)
-                        isPatchAvailable = HaxeClient.isOptionExists(HaxePatcherCmd.name(), message.stderr[0]);
+                    if (message.severity==MessageSeverity.Error) {
+                        if (message.stderr.length > 1) isPatchAvailable = HaxeClient.isOptionExists(HaxePatcherCmd.name(), message.stderr[1]);
+                    }
                     else isPatchAvailable = true;
                 }
                 server.isServerAvailable = err==null;
