@@ -57,7 +57,7 @@ extern class Languages {
   public function registerOnTypeFormattingEditProvider(selector:DocumentSelector, provider:OnTypeFormattingEditProvider, firstTriggerCharacter:String/* , ...moreTriggerCharacter:Array<String> */):Disposable;
   public function registerReferenceProvider(selector:DocumentSelector, provider:ReferenceProvider):Disposable;
   public function registerRenameProvider(selector:DocumentSelector, provider:RenameProvider):Disposable;
-  public function registerSignatureHelpProvider(selector:DocumentSelector, provider:SignatureHelpProvider/* , ...triggerCharacters:Array<String> */):Disposable;
+  public function registerSignatureHelpProvider(selector:DocumentSelector, provider:SignatureHelpProvider, triggerCharacters:Rest<String>):Disposable;
   public function registerWorkspaceSymbolProvider(provider:WorkspaceSymbolProvider):Disposable;
   public function setLanguageConfiguration(language:String, configuration:LanguageConfiguration):Disposable;
 }
@@ -456,6 +456,7 @@ extern class OverviewRulerLane {
   public static var Left;
   public static var Right;
 }
+@:native("Vscode.ParameterInformation")
 extern class ParameterInformation {
   // Constructors
   public function new(label:String, ?documentation:String);
@@ -538,16 +539,19 @@ extern class Selection {
   public function union(other:Range):Range;
   public function with(?start:Position, ?end:Position):Range;
 }
+@:native("Vscode.SignatureHelp")
 extern class SignatureHelp {
+    public function new();
   // Properties
-  public var activeParameter:Float;
-  public var activeSignature:Float;
+  public var activeParameter:Int;
+  public var activeSignature:Int;
   public var signatures:Array<SignatureInformation>;
 }
-extern class SignatureHelpProvider {
+interface SignatureHelpProvider {
   // Methods
   public function provideSignatureHelp(document:TextDocument, position:Position, token:CancellationToken):EitherType<SignatureHelp, Thenable<SignatureHelp>>;
 }
+@:native("Vscode.SignatureInformation")
 extern class SignatureInformation {
   // Constructors
   public function new(label:String, ?documentation:String);

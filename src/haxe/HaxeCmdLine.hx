@@ -10,6 +10,7 @@ enum DisplayMode {
     Type();
     TopLevel();
     Resolve(v:String);
+    FunArgs();
 }
 
 typedef CmdLineStackItem = {cmds:Array<String>, patchers:Map<String, Patcher>, unique:Map<String, String>}
@@ -67,6 +68,7 @@ class HaxeCmdLine {
             case Type: "@position";
             case TopLevel: "@toplevel";
             case Resolve(v): '@resolve@$v';
+            case FunArgs: "@funargs";
         }
         unique.set("--display", '$fileName@${pos}$dm');
         return this;
