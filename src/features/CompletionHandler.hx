@@ -51,12 +51,16 @@ class CompletionHandler implements CompletionItemProvider
 
     var makeCall = false;
     var displayMode = haxe.HaxeCmdLine.DisplayMode.Default;
+  
+    var lastChar = text.charAt(char_pos-1);
+    var isDot =  lastChar == '.';
+
     if (lm==null) makeCall = true;
     else {
         var ct = Date.now().getTime();
         var dlt = ct - lm;
         if (dlt < 200) {
-            makeCall = text.charAt(char_pos-1) == '.';
+            makeCall = isDot;
         } 
         //else {
         //    makeCall = true;
@@ -68,8 +72,7 @@ class CompletionHandler implements CompletionItemProvider
     
     if (!makeCall)
         return new Thenable<Array<CompletionItem>>(function(resolve) {resolve([]);});
-
-    var isDot = text.charAt(char_pos-1) == '.';
+        
     if (!isDot) displayMode = haxe.HaxeCmdLine.DisplayMode.Position;
 
     var byte_pos = Tool.byte_pos(text, char_pos);

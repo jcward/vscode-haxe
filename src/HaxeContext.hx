@@ -8,6 +8,7 @@ import haxe.HaxeClient.MessageSeverity;
 import features.CompletionServer;
 import features.CompletionHandler;
 import features.DefinitionHandler;
+import features.SignatureHandler;
 
 using haxe.HaxeConfiguration;
 import haxe.HaxeConfiguration.HaxeConfigurationObject;
@@ -28,6 +29,7 @@ class HaxeContext  {
     public var server(default, null):CompletionServer;
     public var completionHandler(default, null):CompletionHandler;
     public var definitionHandler(default, null):DefinitionHandler;    
+    public var signatureHandler(default, null):SignatureHandler;    
     public var configuration:HaxeConfigurationObject;
     public var projectDir(default, null):String;
     var haxeProcess:Null<js.node.child_process.ChildProcess>;
@@ -77,6 +79,7 @@ class HaxeContext  {
             server = new CompletionServer(this);
             completionHandler = new CompletionHandler(this);
             definitionHandler = new DefinitionHandler(this);     
+            signatureHandler = new SignatureHandler(this);     
             
             'Using ${ server.isPatchAvailable ? "--patch" : "non-patching" } completion server at ${configuration.haxeServerHost} on port $port'.displayAsInfo();
 

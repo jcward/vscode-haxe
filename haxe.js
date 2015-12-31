@@ -21,6 +21,9 @@ EReg.prototype = {
 	,matched: function(n) {
 		if(this.r.m != null && n >= 0 && n < this.r.m.length) return this.r.m[n]; else throw new js__$Boot_HaxeError("EReg::matched");
 	}
+	,replace: function(s,by) {
+		return s.replace(this.r,by);
+	}
 	,__class__: EReg
 };
 var HaxeContext = function(context) {
@@ -52,6 +55,7 @@ HaxeContext.prototype = {
 			_g.server = new features_CompletionServer(_g);
 			_g.completionHandler = new features_CompletionHandler(_g);
 			_g.definitionHandler = new features_DefinitionHandler(_g);
+			_g.signatureHandler = new features_SignatureHandler(_g);
 			Vscode.window.showInformationMessage("Using " + (_g.server.isPatchAvailable?"--patch":"non-patching") + " completion server at " + _g.configuration.haxeServerHost + " on port " + port);
 			return port;
 		});
@@ -435,6 +439,11 @@ DefinitionProvider.__name__ = true;
 DefinitionProvider.prototype = {
 	__class__: DefinitionProvider
 };
+var SignatureHelpProvider = function() { };
+SignatureHelpProvider.__name__ = true;
+SignatureHelpProvider.prototype = {
+	__class__: SignatureHelpProvider
+};
 var features_CompletionHandler = function(hxContext) {
 	this.hxContext = hxContext;
 	var context = hxContext.context;
@@ -457,15 +466,16 @@ features_CompletionHandler.prototype = {
 		if(__map_reserved[path] != null) lastModifications.setReserved(path,null); else lastModifications.h[path] = null;
 		var makeCall = false;
 		var displayMode = haxe_DisplayMode.Default;
+		var lastChar = text.charAt(char_pos - 1);
+		var isDot = lastChar == ".";
 		if(lm == null) makeCall = true; else {
 			var ct = new Date().getTime();
 			var dlt = ct - lm;
-			if(dlt < 200) makeCall = text.charAt(char_pos - 1) == ".";
+			if(dlt < 200) makeCall = isDot;
 		}
 		if(!makeCall) return new Promise(function(resolve) {
 			resolve([]);
 		});
-		var isDot = text.charAt(char_pos - 1) == ".";
 		if(!isDot) displayMode = haxe_DisplayMode.Position;
 		var byte_pos;
 		if(char_pos == text.length) byte_pos = js_node_buffer_Buffer.byteLength(text,null); else byte_pos = Tool.byteLength(HxOverrides.substr(text,0,char_pos));
@@ -679,6 +689,164 @@ features_DefinitionHandler.prototype = {
 	}
 	,__class__: features_DefinitionHandler
 };
+var features_FunctionDecoder = function() { };
+features_FunctionDecoder.__name__ = true;
+features_FunctionDecoder.asFunctionArgs = function(data) {
+	var l = data.length;
+	var args = [];
+	var i = 0;
+	var sp = 0;
+	var pc = "";
+	var consLevel = 0;
+	var parLevel = 0;
+	var argName = "";
+	var canParseArgName = true;
+	while(i < l) {
+		var c = data.charAt(i);
+		switch(c) {
+		case ":":
+			if(canParseArgName) {
+				canParseArgName = false;
+				argName = data.substring(sp,i - 1);
+				sp = i + 2;
+			}
+			break;
+		case "(":
+			parLevel++;
+			break;
+		case ")":
+			parLevel--;
+			break;
+		case "<":
+			consLevel++;
+			break;
+		case ">":
+			if(pc == "-") {
+				if(parLevel == 0 && consLevel == 0) {
+					args.push({ name : argName, type : data.substring(sp,i - 2)});
+					canParseArgName = true;
+					sp = i + 2;
+				}
+			} else consLevel--;
+			break;
+		}
+		pc = c;
+		i++;
+	}
+	args.push({ name : "", type : HxOverrides.substr(data,sp,null)});
+	return args;
+};
+var features_SignatureHandler = function(hxContext) {
+	this.hxContext = hxContext;
+	var context = hxContext.context;
+	var disposable = Vscode.languages.registerSignatureHelpProvider("haxe",this,"(",",");
+	context.subscriptions.push(disposable);
+};
+features_SignatureHandler.__name__ = true;
+features_SignatureHandler.__interfaces__ = [SignatureHelpProvider];
+features_SignatureHandler.prototype = {
+	provideSignatureHelp: function(document,position,cancelToken) {
+		var _g = this;
+		var changeDebouncer = this.hxContext.changeDebouncer;
+		var server = this.hxContext.server;
+		var path = document.uri.fsPath;
+		var lastModifications = this.hxContext.lastModifications;
+		var lm;
+		lm = __map_reserved[path] != null?lastModifications.getReserved(path):lastModifications.h[path];
+		if(__map_reserved[path] != null) lastModifications.setReserved(path,null); else lastModifications.h[path] = null;
+		var text = document.getText();
+		var char_pos = document.offsetAt(position);
+		var lastChar = text.charAt(char_pos - 1);
+		var makeCall = lastChar == "(" || lastChar == ",";
+		if(!makeCall) return new Promise(function(resolve) {
+			resolve(null);
+		});
+		var displayMode;
+		if(lastChar == ",") displayMode = haxe_DisplayMode.FunArgs; else displayMode = haxe_DisplayMode.Default;
+		var text1 = document.getText();
+		var byte_pos;
+		if(char_pos == text1.length) byte_pos = js_node_buffer_Buffer.byteLength(text1,null); else byte_pos = Tool.byteLength(HxOverrides.substr(text1,0,char_pos));
+		return new Promise(function(resolve1) {
+			var make_request = function() {
+				var client = new haxe_HaxeClient(server.hxContext.configuration.haxeServerHost,server.hxContext.configuration.haxeServerPort);
+				var cl = client.cmdLine.cwd(_g.hxContext.projectDir).hxml(_g.hxContext.configuration.haxeDefaultBuildFile).noOutput().display(path,byte_pos,displayMode);
+				client.sendAll(function(s,message,err) {
+					if(err != null) {
+						Vscode.window.showErrorMessage(err.message);
+						resolve1(null);
+					} else if(message.severity == 2) {
+						_g.hxContext.applyDiagnostics(message);
+						resolve1(null);
+					} else {
+						var datas = message.stderr;
+						var sh = new Vscode.SignatureHelp();
+						sh.activeParameter = 0;
+						sh.activeSignature = 0;
+						var sigs = [];
+						sh.signatures = sigs;
+						if(datas.length > 2 && datas[0] == "<type>") {
+							datas.shift();
+							datas.pop();
+							datas.pop();
+							var _g1 = 0;
+							while(_g1 < datas.length) {
+								var data = datas[_g1];
+								++_g1;
+								data = features_SignatureHandler.reGT.replace(data,">");
+								data = features_SignatureHandler.reLT.replace(data,"<");
+								if(features_SignatureHandler.reFun.match(data)) {
+									var ap = Std.parseInt(features_SignatureHandler.reFun.matched(2)) | 0;
+									if(ap >= 0) sh.activeParameter = ap;
+									data = features_SignatureHandler.reFun.matched(3);
+								}
+								var args = features_FunctionDecoder.asFunctionArgs(data);
+								var ret = args.pop();
+								var si = new Vscode.SignatureInformation(data);
+								sigs.push(si);
+								var pis = args.map(function(v) {
+									return new Vscode.ParameterInformation(v.name,v.type);
+								});
+								si.parameters = pis;
+							}
+						}
+						resolve1(sh);
+					}
+				});
+			};
+			var isDirty = document.isDirty;
+			var client1 = server.client;
+			var doRequest = function() {
+				if(server.isPatchAvailable) changeDebouncer.whenDone(make_request); else if(isDirty && server.isServerAvailable) document.save().then(function(saved) {
+					if(saved) make_request(); else resolve1(null);
+				}); else make_request();
+			};
+			if(!server.isServerAvailable) {
+				var hs = new haxe_HaxeClient(server.hxContext.configuration.haxeServerHost,server.hxContext.configuration.haxeServerPort);
+				var cl1 = hs.cmdLine.version();
+				var patcher = cl1.beginPatch(path);
+				if(isDirty) {
+					var text2 = document.getText();
+					patcher["delete"](0,-1).insert(0,js_node_buffer_Buffer.byteLength(text2,null),text2);
+				} else patcher.remove();
+				server.isPatchAvailable = false;
+				hs.sendAll(function(s1,message1,err1) {
+					var isPatchAvailable = false;
+					var isServerAvailable = true;
+					if(err1 != null) isServerAvailable = false; else {
+						server.isServerAvailable = true;
+						if(message1.severity == 2) {
+							if(message1.stderr.length > 1) isPatchAvailable = haxe_HaxeClient.isOptionExists("--patch",message1.stderr[1]);
+						} else isPatchAvailable = true;
+					}
+					server.isServerAvailable = err1 == null;
+					server.isPatchAvailable = isPatchAvailable;
+					doRequest();
+				});
+			} else doRequest();
+		});
+	}
+	,__class__: features_SignatureHandler
+};
 var haxe_IMap = function() { };
 haxe_IMap.__name__ = true;
 var haxe_RangeInfo = function(s,e,isLineRange) {
@@ -825,7 +993,7 @@ haxe_HaxeClient.prototype = {
 	}
 	,__class__: haxe_HaxeClient
 };
-var haxe_DisplayMode = { __ename__ : true, __constructs__ : ["Default","Position","Usage","Type","TopLevel","Resolve"] };
+var haxe_DisplayMode = { __ename__ : true, __constructs__ : ["Default","Position","Usage","Type","TopLevel","Resolve","FunArgs"] };
 haxe_DisplayMode.Default = ["Default",0];
 haxe_DisplayMode.Default.toString = $estr;
 haxe_DisplayMode.Default.__enum__ = haxe_DisplayMode;
@@ -842,6 +1010,9 @@ haxe_DisplayMode.TopLevel = ["TopLevel",4];
 haxe_DisplayMode.TopLevel.toString = $estr;
 haxe_DisplayMode.TopLevel.__enum__ = haxe_DisplayMode;
 haxe_DisplayMode.Resolve = function(v) { var $x = ["Resolve",5,v]; $x.__enum__ = haxe_DisplayMode; $x.toString = $estr; return $x; };
+haxe_DisplayMode.FunArgs = ["FunArgs",6];
+haxe_DisplayMode.FunArgs.toString = $estr;
+haxe_DisplayMode.FunArgs.__enum__ = haxe_DisplayMode;
 var haxe_HaxeCmdLine = function() {
 	this.reset();
 };
@@ -903,6 +1074,9 @@ haxe_HaxeCmdLine.prototype = {
 		case 5:
 			var v = mode[2];
 			dm = "@resolve@" + v;
+			break;
+		case 6:
+			dm = "@funargs";
 			break;
 		}
 		this.unique.set("--display","" + fileName + "@" + pos + dm);
@@ -1546,6 +1720,9 @@ if(ArrayBuffer.prototype.slice == null) ArrayBuffer.prototype.slice = js_html_co
 var DataView = $global.DataView || js_html_compat_DataView;
 var Uint8Array = $global.Uint8Array || js_html_compat_Uint8Array._new;
 features_DefinitionHandler.rePos = new EReg("[^<]*<pos>(.+)</pos>.*","");
+features_SignatureHandler.reGT = new EReg("&gt;","g");
+features_SignatureHandler.reLT = new EReg("&lt;","g");
+features_SignatureHandler.reFun = new EReg("((\\d+)@)?(.+)","");
 haxe_Info.reWin = new EReg("^\\w+:\\\\","");
 haxe_Info.re1 = new EReg("^((\\w+:\\\\)?([^:]+)):(\\d+):\\s*([^:]+)(:(.+))?","");
 haxe_Info.re2 = new EReg("^((character[s]?)|(line[s]?))\\s+(\\d+)(\\-(\\d+))?","");
