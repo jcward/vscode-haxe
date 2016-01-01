@@ -540,41 +540,54 @@ features_CompletionServer.prototype = {
 	make_client: function() {
 		return new haxe_HaxeClient(this.hxContext.configuration.haxeServerHost,this.hxContext.configuration.haxeServerPort);
 	}
-	,parse_items: function(data) {
+	,parse_items: function(msg) {
 		var rtn = [];
-		if(data.severity == 2) {
-			this.hxContext.applyDiagnostics(data);
+		if(msg.severity == 2) {
+			this.hxContext.applyDiagnostics(msg);
 			return rtn;
 		}
-		var data_str = data.stderr.join("\n");
-		
-                  // Hack hack hack
-                  var items = data_str.split("<i n=");
-                  for (var i=0; i<items.length; i++) {
-                    var item = items[i];
-                    if (item.indexOf("\"")==0) {
-                      var name = item.match(/"(.*?)"/)[1];
-                      var type = item.match(/<t>(.*?)<\/t>/)[1];
-                      type = type.replace(/&gt;/g, ">");
-                      type = type.replace(/&lt;/g, "<");
-                      //Vscode.window.showInformationMessage(name+" : "+type);
-                      var ci = new Vscode.CompletionItem(name);
-                      ci.detail = type;
-                      if (type.indexOf("->")>=0) {
-                        ci.kind = Vscode.CompletionItemKind.Method;
-                      } else {
-                        ci.kind = Vscode.CompletionItemKind.Property;
-                      }
-                      rtn.push(ci);
-                    }
-                  }
-        ;
+		var datas = msg.stderr;
+		if(datas.length > 2 && datas[0] == "<list>") {
+			datas.shift();
+			datas.pop();
+			datas.pop();
+			var _g = 0;
+			while(_g < datas.length) {
+				var data = datas[_g];
+				++_g;
+				console.log(data);
+				if(features_CompletionServer.reI.match(data)) {
+					var n = features_CompletionServer.reI.matched(1);
+					var k = features_CompletionServer.reI.matched(2);
+					var ip = features_CompletionServer.reI.matched(4);
+					var t = features_CompletionServer.reI.matched(5);
+					t = features_CompletionServer.reGT.replace(features_CompletionServer.reLT.replace(t,"<"),">");
+					var d = features_CompletionServer.reI.matched(6);
+					var ci = new Vscode.CompletionItem(n);
+					ci.documentation = d;
+					ci.detail = t;
+					switch(k) {
+					case "method":
+						var ts = t.split("->");
+						var l = ts.length;
+						if(features_CompletionServer.reMethod.match(ts[l - 1])) ci.kind = Vscode.CompletionItemKind.Method; else ci.kind = Vscode.CompletionItemKind.Function;
+						break;
+					case "var":
+						if(ip == "1") ci.kind = Vscode.CompletionItemKind.Property; else ci.kind = Vscode.CompletionItemKind.Field;
+						break;
+					default:
+						ci.kind = Vscode.CompletionItemKind.Field;
+					}
+					rtn.push(ci);
+				}
+			}
+		}
 		return rtn;
 	}
 	,request: function(file,byte_pos,mode,callback) {
 		var _g = this;
 		var cl = this.client.cmdLine;
-		cl.cwd(this.hxContext.projectDir).hxml(this.hxContext.configuration.haxeDefaultBuildFile).noOutput().display(file,byte_pos,mode);
+		cl.cwd(this.hxContext.projectDir).define("display-details").hxml(this.hxContext.configuration.haxeDefaultBuildFile).noOutput().display(file,byte_pos,mode);
 		this.client.sendAll(function(s,message,err) {
 			if(err != null) {
 				_g.isServerAvailable = false;
@@ -700,15 +713,6 @@ features_DefinitionHandler.prototype = {
 	}
 	,__class__: features_DefinitionHandler
 };
-var features_Foo = function() {
-};
-features_Foo.__name__ = true;
-features_Foo.prototype = {
-	foo: function(r) {
-		return null;
-	}
-	,__class__: features_Foo
-};
 var features_FunctionDecoder = function() { };
 features_FunctionDecoder.__name__ = true;
 features_FunctionDecoder.asFunctionArgs = function(data) {
@@ -781,8 +785,7 @@ features_SignatureHandler.prototype = {
 		if(!makeCall) return new Promise(function(resolve) {
 			resolve(null);
 		});
-		var displayMode;
-		if(lastChar == ",") displayMode = haxe_DisplayMode.FunArgs; else displayMode = haxe_DisplayMode.Default;
+		var displayMode = haxe_DisplayMode.Default;
 		var text1 = document.getText();
 		var byte_pos;
 		if(char_pos == text1.length) byte_pos = js_node_buffer_Buffer.byteLength(text1,null); else byte_pos = Tool.byteLength(HxOverrides.substr(text1,0,char_pos));
@@ -804,7 +807,10 @@ features_SignatureHandler.prototype = {
 						sh.activeSignature = 0;
 						var sigs = [];
 						sh.signatures = sigs;
-						if(datas.length > 2 && datas[0] == "<type>") {
+						if(datas.length > 2 && features_SignatureHandler.reType.match(datas[0])) {
+							var opar = Std.parseInt(features_SignatureHandler.reType.matched(2)) | 0;
+							var index = Std.parseInt(features_SignatureHandler.reType.matched(4)) | 0;
+							if(index >= 0) sh.activeParameter = index;
 							datas.shift();
 							datas.pop();
 							datas.pop();
@@ -814,11 +820,6 @@ features_SignatureHandler.prototype = {
 								++_g1;
 								data = features_SignatureHandler.reGT.replace(data,">");
 								data = features_SignatureHandler.reLT.replace(data,"<");
-								if(features_SignatureHandler.reFun.match(data)) {
-									var ap = Std.parseInt(features_SignatureHandler.reFun.matched(2)) | 0;
-									if(ap >= 0) sh.activeParameter = ap;
-									data = features_SignatureHandler.reFun.matched(3);
-								}
 								var args = features_FunctionDecoder.asFunctionArgs(data);
 								var ret = args.pop();
 								var si = new Vscode.SignatureInformation(data);
@@ -1013,7 +1014,7 @@ haxe_HaxeClient.prototype = {
 	}
 	,__class__: haxe_HaxeClient
 };
-var haxe_DisplayMode = { __ename__ : true, __constructs__ : ["Default","Position","Usage","Type","TopLevel","Resolve","FunArgs"] };
+var haxe_DisplayMode = { __ename__ : true, __constructs__ : ["Default","Position","Usage","Type","TopLevel","Resolve"] };
 haxe_DisplayMode.Default = ["Default",0];
 haxe_DisplayMode.Default.toString = $estr;
 haxe_DisplayMode.Default.__enum__ = haxe_DisplayMode;
@@ -1030,9 +1031,6 @@ haxe_DisplayMode.TopLevel = ["TopLevel",4];
 haxe_DisplayMode.TopLevel.toString = $estr;
 haxe_DisplayMode.TopLevel.__enum__ = haxe_DisplayMode;
 haxe_DisplayMode.Resolve = function(v) { var $x = ["Resolve",5,v]; $x.__enum__ = haxe_DisplayMode; $x.toString = $estr; return $x; };
-haxe_DisplayMode.FunArgs = ["FunArgs",6];
-haxe_DisplayMode.FunArgs.toString = $estr;
-haxe_DisplayMode.FunArgs.__enum__ = haxe_DisplayMode;
 var haxe_HaxeCmdLine = function() {
 	this.reset();
 };
@@ -1047,6 +1045,14 @@ haxe_HaxeCmdLine.prototype = {
 	,reset: function() {
 		this.stack = [];
 		this.clear();
+	}
+	,define: function(name,value) {
+		if(name != "") {
+			var str = "-D " + name;
+			if(value != null) str += "=" + value;
+			this.cmds.push(str);
+		}
+		return this;
 	}
 	,hxml: function(fileName) {
 		this.unique.set(" ",fileName);
@@ -1094,9 +1100,6 @@ haxe_HaxeCmdLine.prototype = {
 		case 5:
 			var v = mode[2];
 			dm = "@resolve@" + v;
-			break;
-		case 6:
-			dm = "@funargs";
 			break;
 		}
 		this.unique.set("--display","" + fileName + "@" + pos + dm);
@@ -1739,10 +1742,14 @@ var ArrayBuffer = $global.ArrayBuffer || js_html_compat_ArrayBuffer;
 if(ArrayBuffer.prototype.slice == null) ArrayBuffer.prototype.slice = js_html_compat_ArrayBuffer.sliceImpl;
 var DataView = $global.DataView || js_html_compat_DataView;
 var Uint8Array = $global.Uint8Array || js_html_compat_Uint8Array._new;
+features_CompletionServer.reI = new EReg("<i n=\"([^\"]+)\" k=\"([^\"]+)\"( ip=\"([0-1])\")?><t>([^<]*)</t><d>([^<]*)</d></i>","");
+features_CompletionServer.reGT = new EReg("&gt;","g");
+features_CompletionServer.reLT = new EReg("&lt;","g");
+features_CompletionServer.reMethod = new EReg("Void|Unknown","");
 features_DefinitionHandler.rePos = new EReg("[^<]*<pos>(.+)</pos>.*","");
+features_SignatureHandler.reType = new EReg("<type(\\s+opar='(\\d+)')?(\\s+index='(\\d+)')?>","");
 features_SignatureHandler.reGT = new EReg("&gt;","g");
 features_SignatureHandler.reLT = new EReg("&lt;","g");
-features_SignatureHandler.reFun = new EReg("((\\d+)@)?(.+)","");
 haxe_Info.reWin = new EReg("^\\w+:\\\\","");
 haxe_Info.re1 = new EReg("^((\\w+:\\\\)?([^:]+)):(\\d+):\\s*([^:]+)(:(.+))?","");
 haxe_Info.re2 = new EReg("^((character[s]?)|(line[s]?))\\s+(\\d+)(\\-(\\d+))?","");

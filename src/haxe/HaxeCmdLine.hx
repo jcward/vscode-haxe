@@ -10,7 +10,6 @@ enum DisplayMode {
     Type();
     TopLevel();
     Resolve(v:String);
-    FunArgs();
 }
 
 typedef CmdLineStackItem = {cmds:Array<String>, patchers:Map<String, Patcher>, unique:Map<String, String>}
@@ -35,32 +34,40 @@ class HaxeCmdLine {
         stack = [];
         clear();
     }
-    public function hxml(fileName:String) {
+    public function define(name:String, ?value:String=null):HaxeCmdLine {
+        if (name != "") {
+            var str = '-D $name';
+            if (value!=null) str+='=$value'; 
+            cmds.push(str);
+        }
+        return this;
+    }
+    public function hxml(fileName:String):HaxeCmdLine {
         unique.set(" ", fileName);
         return this;
     }
-    public function cwd(dir) {
+    public function cwd(dir):HaxeCmdLine {
         unique.set("--cwd", '$dir');
         workingDir = dir;
         return this;        
     }
-    public function verbose() {
+    public function verbose():HaxeCmdLine {
         unique.set("-v", "");
         return this;       
     }
-    public function version() {
+    public function version():HaxeCmdLine {
         unique.set("-version", "");
         return this;
     }
-    public function wait(port:Int) {
+    public function wait(port:Int):HaxeCmdLine {
         unique.set("--wait", '$port');
         return this;       
     }
-    public function noOutput() {
+    public function noOutput():HaxeCmdLine {
         unique.set("--no-output", "");
         return this;       
     }    
-    public function display(fileName:String, pos:Int, mode:DisplayMode) {
+    public function display(fileName:String, pos:Int, mode:DisplayMode):HaxeCmdLine {
         var dm = switch (mode) {
             case Default: "";
             case Position: "@position";
@@ -68,17 +75,16 @@ class HaxeCmdLine {
             case Type: "@position";
             case TopLevel: "@toplevel";
             case Resolve(v): '@resolve@$v';
-            case FunArgs: "@funargs";
         }
         unique.set("--display", '$fileName@${pos}$dm');
         return this;
     }
-    public function custom(argName:String, data:String, ?is_unique=true) {
+    public function custom(argName:String, data:String, ?is_unique=true):HaxeCmdLine {
         if (is_unique) unique.set(argName, data);
         else cmds.push('$argName $data');
         return this;
     }
-    public function beginPatch(fileName:String) {
+    public function beginPatch(fileName:String):Patcher {
         var tmp = patchers.get(fileName);
         if (tmp == null) tmp = new Patcher(fileName);
         patchers.set(fileName, tmp);
@@ -94,7 +100,7 @@ class HaxeCmdLine {
         patchers = i.patchers;
         unique = i.unique;
     }
-    public function get_cmds() {
+    public function get_cmds():String {
         var cmds = cmds.concat([]);
         for (key in unique.keys()) {
             cmds.push(key+" " +unique.get(key));

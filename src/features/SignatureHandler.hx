@@ -72,9 +72,9 @@ class SignatureHandler implements SignatureHelpProvider
       context.subscriptions.push(disposable);
   }
   
+  static var reType = ~/<type(\s+opar='(\d+)')?(\s+index='(\d+)')?>/;
   static var reGT = ~/&gt;/g;
   static var reLT = ~/&lt;/g;
-  static var reFun = ~/((\d+)@)?(.+)/;
   
   public function provideSignatureHelp(document:TextDocument,
                                     position:Position,
@@ -96,7 +96,7 @@ class SignatureHandler implements SignatureHelpProvider
       if (!makeCall)
         return new Thenable<SignatureHelp>(function(resolve) {resolve(null);});
 
-      var displayMode = (lastChar==",")?haxe.HaxeCmdLine.DisplayMode.FunArgs:haxe.HaxeCmdLine.DisplayMode.Default; 
+      var displayMode = haxe.HaxeCmdLine.DisplayMode.Default; 
 
       var text = document.getText();
       var byte_pos = Tool.byte_pos(text, char_pos);
@@ -126,18 +126,16 @@ class SignatureHandler implements SignatureHelpProvider
                         sh.activeSignature = 0;
                         var sigs = [];
                         sh.signatures = sigs;
-                        if ((datas.length > 2) && datas[0]=="<type>") {
-                           datas.shift();
-                           datas.pop();
-                           datas.pop();                           
-                           for (data in datas) {
+                        if ((datas.length > 2) && reType.match(datas[0])) {
+                            var opar = Std.parseInt(reType.matched(2))|0;
+                            var index = Std.parseInt(reType.matched(4))|0;
+                            if (index >= 0) sh.activeParameter = index;
+                            datas.shift();
+                            datas.pop();
+                            datas.pop();                           
+                            for (data in datas) {
                                data = reGT.replace(data, ">");
                                data = reLT.replace(data, "<");
-                               if (reFun.match(data)) {
-                                   var ap = Std.parseInt(reFun.matched(2)) | 0;
-                                   if (ap >= 0) sh.activeParameter = ap;
-                                   data = reFun.matched(3);
-                               }
                                var args = data.asFunctionArgs();
                                var ret = args.pop();
                                var si = new SignatureInformation(data);

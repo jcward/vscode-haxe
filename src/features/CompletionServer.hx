@@ -62,46 +62,53 @@ class CompletionServer
         //restart(); // start by hand for now...
     }
     
+    static var reI=~/<i n="([^"]+)" k="([^"]+)"( ip="([0-1])")?><t>([^<]*)<\/t><d>([^<]*)<\/d><\/i>/;
+    static var reGT = ~/&gt;/g;
+    static var reLT = ~/&lt;/g;
+    static var reMethod = ~/Void|Unknown/;
+
     // I hacked this together in JS, Tides will likely replace
-    public function parse_items(data:Message):Array<CompletionItem> {
+    public function parse_items(msg:Message):Array<CompletionItem> {
         var rtn = new Array<CompletionItem>();
         
         //if (decorator != null) decorator(data);
-        if (data.severity==MessageSeverity.Error) {
-            hxContext.applyDiagnostics(data);
+        if (msg.severity==MessageSeverity.Error) {
+            hxContext.applyDiagnostics(msg);
             return rtn;
         }
-        
-        var data_str = data.stderr.join("\n"); // Don't know why this is stderr
-        
-        // TODO: xml parsing, for now, a hack
-        //Vscode.window.showInformationMessage("Decoding: "+data_str.length);
-        //Vscode.window.showInformationMessage("D: "+data_str);
-        
-        untyped __js__('
-                  // Hack hack hack
-                  var items = data_str.split("<i n=");
-                  for (var i=0; i<items.length; i++) {
-                    var item = items[i];
-                    if (item.indexOf("\\"")==0) {
-                      var name = item.match(/"(.*?)"/)[1];
-                      var type = item.match(/<t>(.*?)<\\/t>/)[1];
-                      type = type.replace(/&gt;/g, ">");
-                      type = type.replace(/&lt;/g, "<");
-                      //Vscode.window.showInformationMessage(name+" : "+type);
-                      var ci = new Vscode.CompletionItem(name);
-                      ci.detail = type;
-                      if (type.indexOf("->")>=0) {
-                        ci.kind = Vscode.CompletionItemKind.Method;
-                      } else {
-                        ci.kind = Vscode.CompletionItemKind.Property;
-                      }
-                      rtn.push(ci);
+        var datas = msg.stderr;
+        if ((datas.length > 2) && (datas[0]=="<list>")) {
+            datas.shift();
+            datas.pop();
+            datas.pop();
+            for (data in datas) {
+                trace(data);
+                if (reI.match(data)) {
+                    var n = reI.matched(1);
+                    var k = reI.matched(2);
+                    var ip = reI.matched(4);
+                    var t = reI.matched(5);
+                    t = reGT.replace(reLT.replace(t, "<"), ">");
+                    var d = reI.matched(6);
+                    var ci = new Vscode.CompletionItem(n);
+                    ci.documentation = d;
+                    ci.detail = t;
+                    switch(k) {
+                        case "method":
+                            var ts = t.split("->");
+                            var l = ts.length;
+                            if (reMethod.match(ts[l-1])) ci.kind = Vscode.CompletionItemKind.Method;
+                            else ci.kind = Vscode.CompletionItemKind.Function;
+                        case "var":
+                            if (ip=="1") ci.kind = Vscode.CompletionItemKind.Property;
+                            else ci.kind = Vscode.CompletionItemKind.Field;
+                        default:
+                            ci.kind = Vscode.CompletionItemKind.Field;
                     }
-                  }
-        ');
-        
-        //Vscode.window.showInformationMessage("Returning: "+rtn.length);
+                    rtn.push(ci);
+                }
+            }     
+        }
         return rtn;
     }
     
@@ -114,6 +121,7 @@ class CompletionServer
         
         cl
         .cwd(hxContext.projectDir)
+        .define("display-details")
         .hxml(hxContext.configuration.haxeDefaultBuildFile)
         .noOutput()
         .display(file, byte_pos, mode);
