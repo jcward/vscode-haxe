@@ -12,6 +12,13 @@ enum DisplayMode {
     Resolve(v:String);
 }
 
+@:enum abstract IdeFlag(Int) from Int to Int {
+    var None = 0;
+    var Property = 1;
+    var NotReadable = 2;
+    var NotWritable = 4;
+}
+
 typedef CmdLineStackItem = {cmds:Array<String>, patchers:Map<String, Patcher>, unique:Map<String, String>}
 
 class HaxeCmdLine {

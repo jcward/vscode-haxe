@@ -560,9 +560,10 @@ features_CompletionServer.prototype = {
 					var n = features_CompletionServer.reI.matched(1);
 					var k = features_CompletionServer.reI.matched(2);
 					var ip = features_CompletionServer.reI.matched(4);
-					var t = features_CompletionServer.reI.matched(5);
+					var f = Std.parseInt(features_CompletionServer.reI.matched(6)) | 0;
+					var t = features_CompletionServer.reI.matched(7);
 					t = features_CompletionServer.reGT.replace(features_CompletionServer.reLT.replace(t,"<"),">");
-					var d = features_CompletionServer.reI.matched(6);
+					var d = features_CompletionServer.reI.matched(8);
 					var ci = new Vscode.CompletionItem(n);
 					ci.documentation = d;
 					ci.detail = t;
@@ -573,7 +574,7 @@ features_CompletionServer.prototype = {
 						if(features_CompletionServer.reMethod.match(ts[l - 1])) ci.kind = Vscode.CompletionItemKind.Method; else ci.kind = Vscode.CompletionItemKind.Function;
 						break;
 					case "var":
-						if(ip == "1") ci.kind = Vscode.CompletionItemKind.Property; else ci.kind = Vscode.CompletionItemKind.Field;
+						if(ip == "1") ci.kind = Vscode.CompletionItemKind.Property; else if((f & 1) != 0) ci.kind = Vscode.CompletionItemKind.Property; else ci.kind = Vscode.CompletionItemKind.Field;
 						break;
 					default:
 						ci.kind = Vscode.CompletionItemKind.Field;
@@ -1742,7 +1743,7 @@ var ArrayBuffer = $global.ArrayBuffer || js_html_compat_ArrayBuffer;
 if(ArrayBuffer.prototype.slice == null) ArrayBuffer.prototype.slice = js_html_compat_ArrayBuffer.sliceImpl;
 var DataView = $global.DataView || js_html_compat_DataView;
 var Uint8Array = $global.Uint8Array || js_html_compat_Uint8Array._new;
-features_CompletionServer.reI = new EReg("<i n=\"([^\"]+)\" k=\"([^\"]+)\"( ip=\"([0-1])\")?><t>([^<]*)</t><d>([^<]*)</d></i>","");
+features_CompletionServer.reI = new EReg("<i n=\"([^\"]+)\" k=\"([^\"]+)\"( ip=\"([0-1])\")?( f=\"(\\d+)\")?><t>([^<]*)</t><d>([^<]*)</d></i>","");
 features_CompletionServer.reGT = new EReg("&gt;","g");
 features_CompletionServer.reLT = new EReg("&lt;","g");
 features_CompletionServer.reMethod = new EReg("Void|Unknown","");

@@ -4,6 +4,7 @@ import Vscode;
 
 import HaxeContext;
 import haxe.HaxeClient;
+import haxe.HaxeCmdLine.IdeFlag;
 
 import Tool;
 using Tool;
@@ -62,7 +63,7 @@ class CompletionServer
         //restart(); // start by hand for now...
     }
     
-    static var reI=~/<i n="([^"]+)" k="([^"]+)"( ip="([0-1])")?><t>([^<]*)<\/t><d>([^<]*)<\/d><\/i>/;
+    static var reI=~/<i n="([^"]+)" k="([^"]+)"( ip="([0-1])")?( f="(\d+)")?><t>([^<]*)<\/t><d>([^<]*)<\/d><\/i>/;
     static var reGT = ~/&gt;/g;
     static var reLT = ~/&lt;/g;
     static var reMethod = ~/Void|Unknown/;
@@ -87,9 +88,10 @@ class CompletionServer
                     var n = reI.matched(1);
                     var k = reI.matched(2);
                     var ip = reI.matched(4);
-                    var t = reI.matched(5);
+                    var f:IdeFlag = Std.parseInt(reI.matched(6))|0;
+                    var t = reI.matched(7);
                     t = reGT.replace(reLT.replace(t, "<"), ">");
-                    var d = reI.matched(6);
+                    var d = reI.matched(8);
                     var ci = new Vscode.CompletionItem(n);
                     ci.documentation = d;
                     ci.detail = t;
@@ -101,6 +103,7 @@ class CompletionServer
                             else ci.kind = Vscode.CompletionItemKind.Function;
                         case "var":
                             if (ip=="1") ci.kind = Vscode.CompletionItemKind.Property;
+                            else if ((f & IdeFlag.Property) != 0) ci.kind = Vscode.CompletionItemKind.Property;
                             else ci.kind = Vscode.CompletionItemKind.Field;
                         default:
                             ci.kind = Vscode.CompletionItemKind.Field;
