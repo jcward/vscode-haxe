@@ -156,6 +156,7 @@ extern class CommentRule {
   public var blockComment:CharacterPair;
   public var lineComment:String;
 }
+@:native("Vscode.CompletionItem")
 extern class CompletionItem {
   // Constructors
   public function new(label:String);
@@ -169,6 +170,7 @@ extern class CompletionItem {
   public var sortText:String;
   public var textEdit:TextEdit;
 }
+@:native("Vscode.CompletionItemKind")
 extern class CompletionItemKind {
   // Enumeration members
   public static var Class;
