@@ -35,31 +35,14 @@ class DefinitionHandler implements DefinitionProvider
   {
       var changeDebouncer = hxContext.changeDebouncer;
       var client = hxContext.client;
+      
       var path:String = document.uri.fsPath;
-      
-      var lastModifications = hxContext.lastModifications;   
-      var lm = lastModifications.get(path);
-      lastModifications.set(path, null);
-      
-      var makeCall = false;
-      
       var displayMode = haxe.HaxeCmdLine.DisplayMode.Position;
       
-      if (lm==null) makeCall = true;
-      else {
-        var ct = Date.now().getTime();
-        var dlt = ct - lm;
-        if (dlt > 200) {
-            makeCall = true;
-        }
-      }
-      
-      if (!makeCall)
-        return new Thenable<Definition>( function(resolve) {resolve(null);});
-
       var text = document.getText();
       var range = document.getWordRangeAtPosition(position);
       position = range.end;
+      
       var char_pos = document.offsetAt(position) + 1;
       var byte_pos = Tool.byte_pos(text, char_pos);
  

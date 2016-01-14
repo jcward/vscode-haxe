@@ -89,36 +89,27 @@ class CompletionHandler implements CompletionItemProvider
     
     var changeDebouncer = hxContext.changeDebouncer;
     var client = hxContext.client;
-    var line = document.lineAt(position);
- 
+
     var text = document.getText();
     var char_pos = document.offsetAt(position);
     var path:String = document.uri.fsPath;
 
-    var lastModifications = hxContext.lastModifications;
-    var lm = lastModifications.get(path);
-    lastModifications.set(path, null);
+    var documentState = hxContext.getDocumentState(path);
+    var lm = documentState.lastModification;
 
+    var delta = hxContext.getTime() - lm;
+    
     var makeCall = false;
     var displayMode = haxe.HaxeCmdLine.DisplayMode.Default;
   
     var lastChar = text.charAt(char_pos-1);
     var isDot =  lastChar == '.';
-
-    if (lm==null) makeCall = true;
-    else {
-        var ct = Date.now().getTime();
-        var dlt = ct - lm;
-        if (dlt < 200) {
-            makeCall = isDot;
-        } 
-        //else {
-        //    makeCall = true;
-        //}
-    }
     
-    //Vscode.window.showInformationMessage("C: "+byte_pos);
-    //Vscode.window.showInformationMessage("F: "+path);
+    makeCall = isDot;
+
+    if (isDot) {
+        if (delta > 150) makeCall = true;
+    }
     
     if (!makeCall)
         return new Thenable<Array<CompletionItem>>(function(resolve) {resolve([]);});

@@ -20,6 +20,8 @@ import haxe.HaxePatcherCmd.PatcherUnit;
 import js.Promise;
 import js.node.ChildProcess;
 
+typedef DocumentState = {isDirty:Bool, lastModification:Float, lastDiagnostic:Float, path:String};
+
 class HaxeContext  {
     public static inline function languageID() return "haxe";
     
@@ -38,8 +40,7 @@ class HaxeContext  {
     public var changeDebouncer(default, null):Tool.Debouncer<TextDocumentChangeEvent>;
 #end
 
-    public var lastModifications(default, null):Map<String, Float>;
-
+    public var documentsState(default, null):Map<String, DocumentState>;
 
 //    public var decoration(default, null):decorator.HaxeDecoration
     public function new(context:ExtensionContext) {
@@ -53,7 +54,7 @@ class HaxeContext  {
         diagnostics =  Vscode.languages.createDiagnosticCollection(languageID());
         context.subscriptions.push(cast diagnostics);
         
-        lastModifications = new Map<String, Float>();
+        documentsState = new Map<String, DocumentState>();
 
         context.subscriptions.push(cast this);
     }
@@ -70,8 +71,8 @@ class HaxeContext  {
         context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument(changePatch));
 #end
         // remove the patch if the document is opened, saved, or closed
-        context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument(removeAndDiagnoseDocument));    
-        context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument(removeAndDiagnoseDocument));
+        context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument(onOpenDocument));    
+        context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument(onSaveDocument));
         context.subscriptions.push(Vscode.workspace.onDidCloseTextDocument(onCloseDocument));
 
         completionHandler = new CompletionHandler(this);
@@ -125,11 +126,12 @@ class HaxeContext  {
             var cl = client.cmdLine;
             for (editor in Vscode.window.visibleTextEditors) {
                 var path = editor.document.uri.fsPath;
-                lastModifications.remove(path);
-                cl.beginPatch(editor.document.uri.fsPath).remove();
+                documentsState.remove(path);
+                cl.beginPatch(path).remove();
             }
             client.sendAll(null);
         }
+
         if (haxeProcess!=null) {
             haxeProcess.kill("SIGKILL");
             haxeProcess = null;
@@ -141,8 +143,6 @@ class HaxeContext  {
     }
    
     public function applyDiagnostics(message:Message) {
-        //diagnostic.clear();
-        
         var all = new Map<String, Null<Array<Diagnostic>>>();            
         for (info in message.infos) {
             var diags = all.get(info.fileName);
@@ -173,22 +173,42 @@ class HaxeContext  {
                 continue;
             }
             diagnostics.set(url, diags);
+            var ds = getDocumentState(url.fsPath);
+            ds.lastDiagnostic = getTime();
         }
     }
-
+    inline public function getTime() return Date.now().getTime();    
+    public function getDocumentState(path) {
+        var ds = documentsState.get(path);
+        if (ds != null) return ds;
+        var t = getTime();
+        ds = {path:path, isDirty:false, lastModification:t, lastDiagnostic:t};
+        documentsState.set(path, ds);
+        return ds;
+    }
     public function onCloseDocument(document) {
         var path:String = document.uri.fsPath;
-        lastModifications.remove(path);
+        documentsState.remove(path);
         if (client.isPatchAvailable) {
             client.cmdLine.save().beginPatch(path).remove();
             client.sendAll(null, true);
             diagnostics.delete(untyped document.uri);
         }      
     }
+    function onOpenDocument(document) {
+        var path:String = document.uri.fsPath;
+        removeAndDiagnoseDocument(document);
+    }
+    function onSaveDocument(document) {
+        var path:String = document.uri.fsPath;
+        var ds = getDocumentState(path);
+        ds.isDirty = false;
+        ds.lastModification = getTime();
+        removeAndDiagnoseDocument(document);        
+    }
     public function removeAndDiagnoseDocument(document) {
         diagnostics.delete(untyped document.uri);
         var path:String = document.uri.fsPath;
-        lastModifications.remove(path);
         
         var trying = 1;
         
@@ -296,11 +316,13 @@ class HaxeContext  {
     function changePatch(event:TextDocumentChangeEvent) {
         var document = event.document;
         var path:String = document.uri.fsPath;
+        var ds = getDocumentState(path);
         if (event.contentChanges.length==0) {
-            lastModifications.remove(path);
+            ds.isDirty = false;
             return;
         }
-        lastModifications.set(path, Date.now().getTime());
+        ds.isDirty = true;
+        ds.lastModification = getTime();
         changeDebouncer.debounce(event);
     }
 #end

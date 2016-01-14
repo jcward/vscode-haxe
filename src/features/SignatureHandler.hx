@@ -81,26 +81,16 @@ class SignatureHandler implements SignatureHelpProvider
                                     cancelToken:CancellationToken):Thenable<SignatureHelp>
   {
       var client = hxContext.client;
-
       var changeDebouncer = hxContext.changeDebouncer;
+      
       var path:String = document.uri.fsPath;
       
-      var lastModifications = hxContext.lastModifications;
-      var lm = lastModifications.get(path);
-      lastModifications.set(path, null);
-      
       var text = document.getText();
-      var char_pos = document.offsetAt(position);      
-      var lastChar = text.charAt(char_pos-1);
-      var makeCall = (lastChar == "(") || (lastChar==",");
-
-      if (!makeCall)
-        return new Thenable<SignatureHelp>(function(resolve) {resolve(null);});
-
-      var displayMode = haxe.HaxeCmdLine.DisplayMode.Default; 
-
+      var char_pos = document.offsetAt(position);          
       var text = document.getText();
       var byte_pos = Tool.byte_pos(text, char_pos);
+
+      var displayMode = haxe.HaxeCmdLine.DisplayMode.Default; 
 
       return new Thenable<SignatureHelp>(function(resolve) {
           var trying = 1;
