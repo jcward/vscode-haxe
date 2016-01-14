@@ -19,27 +19,27 @@ enum DisplayMode {
     var NotWritable = 4;
 }
 
-typedef CmdLineStackItem = {cmds:Array<String>, patchers:Map<String, Patcher>, unique:Map<String, String>}
+typedef CmdLineStackItem = {cmds:Array<String>, unique:Map<String, String>, workingDir:String}
 
 class HaxeCmdLine {
     var cmds(default, null):Array<String>;
     var unique(default, null):Map<String, String>;
-    var stack:Array<CmdLineStackItem>;
-    var patchers:Map<String, Patcher>;
+    var stack(default, null):Array<CmdLineStackItem>;
+    var patchers(default, null):Map<String, Patcher>;
     public var workingDir(default, null):String;
      
     public function new() {
         reset();
     }
-    public function clear() {
+    public function clear(?haveToClearPatch=false) {
         cmds = [];
         unique = new Map<String, String>();
         workingDir = "";
-        patchers = new Map<String, Patcher>();
+        if (haveToClearPatch) clearPatch();
     }
     public function reset() {
         stack = [];
-        clear();
+        clear(true);
     }
     public function define(name:String, ?value:String=null):HaxeCmdLine {
         if (name != "") {
@@ -97,15 +97,28 @@ class HaxeCmdLine {
         patchers.set(fileName, tmp);
         return tmp; 
     }
+    public function clearPatch() {
+        patchers = new Map<String, Patcher>();
+        return this;
+    }
     public function save() {
-        stack.push({cmds:cmds, patchers:patchers, unique:unique});
+        var wd = workingDir;
+        var pt = patchers;
+        // don't save patch as they must be applied in the order they appeared
+        stack.push({cmds:cmds, unique:unique, workingDir:wd});
         clear();
+        patchers = pt;
+        if (wd!="") {
+            cwd(wd);
+        }
+        return this;
     }
     public function restore() {
         var i = stack.pop();
         cmds = i.cmds;
-        patchers = i.patchers;
         unique = i.unique;
+        workingDir = i.workingDir;
+        return this;
     }
     public function get_cmds():String {
         var cmds = cmds.concat([]);

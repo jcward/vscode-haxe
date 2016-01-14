@@ -2,8 +2,6 @@ package haxe;
 
 import Socket.Error;
 
-typedef OptionAvailable = {isServerAvailable:Bool, isOptionAvailable:Bool, isHaxeServer:Bool};
-
 @:enum abstract MessageSeverity(Int) {
     var Info = 0;
     var Warning = 1;
@@ -81,26 +79,53 @@ class Info {
 }
 
 class HaxeClient {
-    public var host:String;
+    public var host(default, null):String;
     public var port:Int;
     public var cmdLine(default, null):HaxeCmdLine;
- 
+    public var isServerAvailable:Bool;
+    public var isPatchAvailable:Bool;
+    public var isHaxeServer:Bool;
+    
     public function new(host:String, port:Int) {
         this.host = host;
         this.port = port;
+        isHaxeServer = false;
+        isPatchAvailable = false;
+        isServerAvailable = false;
         cmdLine = new HaxeCmdLine();
-        clear();
     }
+    /*
+    public function clone() {
+        var tmp = new HaxeClient(host, port);
+        return tmp.updateStatus(this);
+    }
+    public function udpateStatus(client:HaxeCLient) {
+        isHaxeServer = client.isHaxeServer;
+        isServerAvailable = client.isServerAvailable;
+        isPatchAvailable = client.isPatchAvailable;
+        return this;
+    }
+    */
     public function clear() {
         cmdLine.clear();
     }
-    public function sendAll(onClose:Null<Socket->Message->Null<Error>->Void>) {        
+    public function sendAll(onClose:Null<Socket->Message->Null<Error>->Void>, ?restoreCmdLine=false) {
+        var cmds = cmdLine.get_cmds();
+        cmdLine.clearPatch();
         var workingDir = cmdLine.workingDir;
         
-        var s = new Socket();
+        if (restoreCmdLine) cmdLine.restore();
         
-        s.connect(host, port, _onConnect, null, null,
+        var s = new Socket();
+        s.connect(host, port,
+            function(s) {
+                s.write(cmds);
+                s.write("\x00");
+            }, 
+            null, null,
             function (s) {
+                isServerAvailable = (s.error == null);
+
                 clear();
                 
                 if (onClose != null) {
@@ -129,29 +154,24 @@ class HaxeClient {
  
         return s;
     }
-    function _onConnect(s:Socket) {
-        s.write(cmdLine.get_cmds());        
-        s.write("\x00");
-    }
     public static function isOptionExists(optionName:String, data:String) {
         var re = new EReg("unknown option '"+optionName+"'", "");
  
         return !re.match(data);
     }
     static var reVersion = ~/(\d+).(\d+).(\d+)(.+)?/;
-    public static function get_status(message:Message, error:Null<Error>) {
-        var isServerAvailable = true;
-        var isPatchAvailable = false;
-        var isHaxeServer = false;
-        if (error != null) isServerAvailable = false;
-        else {
+    public function setStatus(message:Message, error:Null<Error>) {
+        isServerAvailable = (error == null);
+        isPatchAvailable = false;
+        isHaxeServer = false;
+        if (isServerAvailable) {
             isPatchAvailable = message.severity!=MessageSeverity.Error;
             if (message.stderr.length>0)
                 isHaxeServer = reVersion.match(message.stderr[0]);
         }
-        return {isServerAvailable:isServerAvailable, isOptionAvailable:isPatchAvailable, isHaxeServer:isHaxeServer};
+        return this;
     }
-    public function isPatchAvailable(onData:OptionAvailable->Void) {
+    public function patchAvailable(onData:Null<HaxeClient->Void>) {
         cmdLine.save();
         
         cmdLine
@@ -162,7 +182,8 @@ class HaxeClient {
         sendAll(
             function (s:Socket, message:Message, error:Null<Error>) {
                 cmdLine.restore();
-                onData(get_status(message, error));
+                setStatus(message, error);
+                if (onData!=null) onData(this);
             }
         );
     }

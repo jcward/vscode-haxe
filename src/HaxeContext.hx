@@ -5,7 +5,6 @@ import haxe.HaxeClient;
 import haxe.HaxeClient.Message;
 import haxe.HaxeClient.MessageSeverity;
 
-import features.CompletionServer;
 import features.CompletionHandler;
 import features.DefinitionHandler;
 import features.SignatureHandler;
@@ -26,7 +25,7 @@ class HaxeContext  {
     
     public var context(default, null):ExtensionContext;
     public var diagnostics(default, null):DiagnosticCollection;
-    public var server(default, null):CompletionServer;
+    public var client(default, null):HaxeClient;
     public var completionHandler(default, null):CompletionHandler;
     public var definitionHandler(default, null):DefinitionHandler;    
     public var signatureHandler(default, null):SignatureHandler;    
@@ -60,8 +59,8 @@ class HaxeContext  {
     }
     public function init() {
         return launchServer().then(function (port) {
+            client.port = port;
             configuration.haxeServerPort = port;
-             // decoration = new decorator.HaxeDecoration();
 
             projectDir = Vscode.workspace.rootPath;
 
@@ -76,49 +75,53 @@ class HaxeContext  {
             context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument(removeAndDiagnoseDocument));
             context.subscriptions.push(Vscode.workspace.onDidCloseTextDocument(onCloseDocument));
 
-            server = new CompletionServer(this);
             completionHandler = new CompletionHandler(this);
             definitionHandler = new DefinitionHandler(this);     
             signatureHandler = new SignatureHandler(this);     
             
-            'Using ${ server.isPatchAvailable ? "--patch" : "non-patching" } completion server at ${configuration.haxeServerHost} on port $port'.displayAsInfo();
+            'Using ${ client.isPatchAvailable ? "--patch" : "non-patching" } completion server at ${configuration.haxeServerHost} on port $port'.displayAsInfo();
 
             return port;     
       });
     }
+    function makeClient() {
+        var host = configuration.haxeServerHost;
+        var port = configuration.haxeServerPort;
+        return new HaxeClient(host, port);        
+    }
     function launchServer() {
         var host = configuration.haxeServerHost;
         var port = configuration.haxeServerPort;
-        var client = new HaxeClient(host, port);
+        client = new HaxeClient(host, port);
+
         return new Promise<Int>(function (resolve, reject){
             function onData(data) {
                 if (data.isHaxeServer) return resolve(port);
                 if (data.isServerAvailable) {
                     port ++;
-                    client.isPatchAvailable(onData);
+                    client.patchAvailable(onData);
                 } else {
                     if (haxeProcess!=null) haxeProcess.kill("SIGKILL");
                     haxeProcess = ChildProcess.spawn(configuration.haxeExec, ["--wait", '$port']);
                     if (haxeProcess.pid > 0)  {
                         configuration.haxeServerPort = port;
-                        client.isPatchAvailable(onData);
+                        client.patchAvailable(onData);
                     }
                     haxeProcess.on("error", function(err){
                         haxeProcess = null;
-                        'Can\'t spawn ${configuration.haxeExec} process'.displayAsError(); 
+                        'Can\'t spawn ${configuration.haxeExec} process\n${err.message}'.displayAsError(); 
                         reject(err);
                     });
                 }
             }
 
-            client.isPatchAvailable(onData);            
+            client.patchAvailable(onData);            
         });
     }
     function dispose():Dynamic {
         Vscode.window.showInformationMessage("Got dispose!");
 
-        if (server.isServerAvailable && server.isPatchAvailable) {
-            var client= server.client;
+        if (client.isServerAvailable && client.isPatchAvailable) {
             client.clear();
             var cl = client.cmdLine;
             for (editor in Vscode.window.visibleTextEditors) {
@@ -132,6 +135,9 @@ class HaxeContext  {
             haxeProcess.kill("SIGKILL");
             haxeProcess = null;
         }
+        
+        client = null;
+
         return null;
     }
    
@@ -170,66 +176,40 @@ class HaxeContext  {
             diagnostics.set(url, diags);
         }
     }
-/*
-    static function applyDecorations(editor, infos:Array<haxe.Info>, isError:Bool) {
-        if (editor==null) return;
-        var document = editor.document;
-        var path = document.uri.fsPath;
-        var lineErrors = [];
-        var charErrors = [];
-        for (info in infos) {
-            if (info.fileName == path) {
-                var re = info.toVSCRange();
-                var r = info.range;
-                if (r.isLineRange) {
-                    if (isError) lineErrors.push({hoverMessage:info.message, range:re});
-                } else {
-                    if (isError) charErrors.push({hoverMessage:info.message, range:re});
-                }
-            }
-        }
-        editor.setDecorations(decoration.errorLineDecoration, lineErrors);
-        editor.setDecorations(decoration.errorCharDecoration, charErrors);
-    }
-*/
-//    function applyDecorations(message:Message) {
-//        applyDecorations(Vscode.window.activeTextEditor, message.infos, message.severity == Error);
-//    }
 
-  public function onCloseDocument(document) {
-      var path:String = document.uri.fsPath;
-      lastModifications.remove(path);
-      if (server.isPatchAvailable) {
-          var client = server.make_client();
-          client.cmdLine.beginPatch(path).remove();
-          client.sendAll(null);
-          diagnostics.delete(untyped document.uri);
-      }      
-  }
-  public function removeAndDiagnoseDocument(document) {
-      diagnostics.delete(untyped document.uri);
-      var path:String = document.uri.fsPath;
-      lastModifications.remove(path);
-      var client = server.make_client();
-      var cl = client.cmdLine
-        .cwd(projectDir)
-        .hxml(configuration.haxeDefaultBuildFile)
-        .noOutput()
-      ;
-      if (server.isPatchAvailable) {
-          cl.beginPatch(path).remove();
-      }
-      client.sendAll(function(s, message, err){
-          if (err!=null) err.message.displayAsError();
-          else applyDiagnostics(message);
-      });
-  }   
+    public function onCloseDocument(document) {
+        var path:String = document.uri.fsPath;
+        lastModifications.remove(path);
+        if (client.isPatchAvailable) {
+            client.cmdLine.save().beginPatch(path).remove();
+            client.sendAll(null, true);
+            diagnostics.delete(untyped document.uri);
+        }      
+    }
+    public function removeAndDiagnoseDocument(document) {
+        diagnostics.delete(untyped document.uri);
+        var path:String = document.uri.fsPath;
+        lastModifications.remove(path);
+        var cl = client.cmdLine.save()
+            .cwd(projectDir)
+            .hxml(configuration.haxeDefaultBuildFile)
+            .noOutput()
+        ;
+        if (client.isPatchAvailable) {
+            cl.beginPatch(path).remove();
+        }
+        client.sendAll(
+            function(s, message, err){
+                if (err!=null) err.message.displayAsError();
+                else applyDiagnostics(message);
+            },
+            true
+        );
+    }   
 #if DO_FULL_PATCH
 #else
-    function changePatchs(events:Array<TextDocumentChangeEvent>) {
-        var client = server.make_client();
-        
-        var cl = client.cmdLine
+    function changePatchs(events:Array<TextDocumentChangeEvent>) {        
+        var cl = client.cmdLine.save()
             .cwd(projectDir)
             // patch should only patch no validate document
             // so disable args that can trigger the validation
@@ -256,7 +236,7 @@ class HaxeContext  {
             
             var patcher = cl.beginPatch(path);
                             
-            if (!server.isServerAvailable) {
+            if (!client.isServerAvailable) {
                 if (done.get(path)) continue;
                 done.set(path, true);
                 
@@ -267,7 +247,7 @@ class HaxeContext  {
                 
                 //cl.display(path, bl, haxe.HaxeCmdLine.DisplayMode.Position);
                 changed = true;
-            } else if (server.isPatchAvailable) {
+            } else if (client.isPatchAvailable) {
                 for (change in changes) {
                     var rl = change.rangeLength;
                     var range = change.range;
@@ -291,9 +271,12 @@ class HaxeContext  {
         }
         
         if (changed) {
-            client.sendAll(function (s, message, error) {
-                if (error==null) applyDiagnostics(message);        
-            });
+            client.sendAll(
+                function (s, message, error) {
+                    if (error==null) applyDiagnostics(message);        
+                },
+                true
+            );
         }
     }
     function changePatch(event:TextDocumentChangeEvent) {

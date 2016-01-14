@@ -11,6 +11,8 @@ import haxe.HaxePatcherCmd;
 import haxe.HaxePatcherCmd.PatcherUnit;
 import haxe.HaxeClient;
 import haxe.HaxeClient.MessageSeverity;
+import haxe.HaxeCmdLine.IdeFlag;
+
 
 class CompletionHandler implements CompletionItemProvider
 {
@@ -25,22 +27,70 @@ class CompletionHandler implements CompletionItemProvider
       var disposable = Vscode.languages.registerCompletionItemProvider(HaxeContext.languageID(), this, '.');
       context.subscriptions.push(disposable);
   }
+  
+  static var reI=~/<i n="([^"]+)" k="([^"]+)"( ip="([0-1])")?( f="(\d+)")?><t>([^<]*)<\/t><d>([^<]*)<\/d><\/i>/;
+  static var reGT = ~/&gt;/g;
+  static var reLT = ~/&lt;/g;
+  static var reMethod = ~/Void|Unknown/;
+  
+  public function parse_items(msg:Message):Array<CompletionItem> {
+      var rtn = new Array<CompletionItem>();
+      
+      if (msg.severity==MessageSeverity.Error) {
+          hxContext.applyDiagnostics(msg);
+          return rtn;
+      }
+      var datas = msg.stderr;
+      if ((datas.length > 2) && (datas[0]=="<list>")) {
+          datas.shift();
+          datas.pop();
+          datas.pop();
+          for (data in datas) {
+              if (reI.match(data)) {
+                  var n = reI.matched(1);
+                  var k = reI.matched(2);
+                  var ip = reI.matched(4);
+                  var f:IdeFlag = Std.parseInt(reI.matched(6))|0;
+                  var t = reI.matched(7);
+                  t = reGT.replace(reLT.replace(t, "<"), ">");
+                  var d = reI.matched(8);
+                  var ci = new Vscode.CompletionItem(n);
+                  ci.documentation = d;
+                  ci.detail = t;
+                  switch(k) {
+                      case "method":
+                        var ts = t.split("->");
+                        var l = ts.length;
+                        if (reMethod.match(ts[l-1])) ci.kind = Vscode.CompletionItemKind.Method;
+                        else ci.kind = Vscode.CompletionItemKind.Function;
+                      case "var":
+                        if (ip=="1") ci.kind = Vscode.CompletionItemKind.Property;
+                        else if ((f & IdeFlag.Property) != 0) ci.kind = Vscode.CompletionItemKind.Property;
+                        else ci.kind = Vscode.CompletionItemKind.Field;
+                      default:
+                        ci.kind = Vscode.CompletionItemKind.Field;
+                  }
+                  rtn.push(ci);
+              }
+          }     
+      }
+      return rtn;
+  }
+
   public function provideCompletionItems(document:TextDocument,
                                          position:Position,
                                          cancelToken:CancellationToken):Thenable<Array<CompletionItem>>
   {
-      var changeDebouncer = hxContext.changeDebouncer;
-      var server = hxContext.server;
-
-    // find last . before current position
-    var line = document.lineAt(position);
-
     // So far we don't parse this output from the completion server:
     // <type>key : String -&gt; Bool</type>
     //else if (subline.indexOf('(')>=0) {
     //  dot_offset = subline.lastIndexOf('(') - position.character + 1;
     //}
     
+    var changeDebouncer = hxContext.changeDebouncer;
+    var client = hxContext.client;
+    var line = document.lineAt(position);
+ 
     var text = document.getText();
     var char_pos = document.offsetAt(position);
     var path:String = document.uri.fsPath;
@@ -79,12 +129,24 @@ class CompletionHandler implements CompletionItemProvider
 
     return new Thenable<Array<CompletionItem>>(function(resolve) {
       function make_request() {
-        server.request(path,
-                       byte_pos,
-                       displayMode,
-                       function(items:Array<CompletionItem>) {
-                         resolve(items);
-                       });
+          var cl = client.cmdLine.save()
+          .cwd(hxContext.projectDir)
+          .define("display-details")
+          .hxml(hxContext.configuration.haxeDefaultBuildFile)
+          .noOutput()
+          .display(path, byte_pos, displayMode);
+          
+          client.sendAll(
+              function (s, message, err) {
+                if (err != null) {
+                    err.message.displayAsError();
+                    resolve([]);                
+                } else {
+                    resolve(parse_items(message));
+                }
+             },
+             true
+          );
       }
 
       // TODO: haxe completion server requires save before compute...
@@ -92,13 +154,13 @@ class CompletionHandler implements CompletionItemProvider
       //       See: https://github.com/HaxeFoundation/haxe/issues/4651
       
       var isDirty = document.isDirty;
-      var client = server.client;
 
       function doRequest() {
-        if (server.isPatchAvailable) {
+        var isPatchAvailable = client.isPatchAvailable;
+        var isServerAvailable = client.isServerAvailable;
+        if (isPatchAvailable) {
 #if DO_FULL_PATCH
             if (isDirty) {
-                var client = server.client;
                 client.beginPatch(path).delete(0,-1).insert(0, document.getText());
                 make_request();
             } else {
@@ -108,7 +170,7 @@ class CompletionHandler implements CompletionItemProvider
             changeDebouncer.whenDone(function(){make_request();});
 #end
         } else {
-            if (isDirty && server.isServerAvailable) {
+            if (isDirty && isServerAvailable) {
                 document.save().then(function (saved) {
                     if (saved) make_request(); 
                     else resolve([]);
@@ -119,9 +181,8 @@ class CompletionHandler implements CompletionItemProvider
         }          
       }
       
-      if (!server.isServerAvailable) {
-          var hs = server.make_client();
-          var cl = hs.cmdLine.version();
+      if (!client.isServerAvailable) {
+          var cl = client.cmdLine.save().version();
           var patcher = cl.beginPatch(path);
 
           if (isDirty) {
@@ -133,25 +194,20 @@ class CompletionHandler implements CompletionItemProvider
           } else {
               patcher.remove();
           }
-          
-          server.isPatchAvailable = false;
-          
-          hs.sendAll(
+                    
+          client.sendAll(
             function (s:Socket, message, err) {
                 var isPatchAvailable = false;
-                var isServerAvailable = true;
-                if (err != null) isServerAvailable = false;
-                else {
-                    server.isServerAvailable = true;
+                if (client.isServerAvailable) {
                     if (message.severity==MessageSeverity.Error) {
                         if (message.stderr.length > 1) isPatchAvailable = HaxeClient.isOptionExists(HaxePatcherCmd.name(), message.stderr[1]);
                     }
                     else isPatchAvailable = true;
                 }
-                server.isServerAvailable = err==null;
-                server.isPatchAvailable=isPatchAvailable;
+                client.isPatchAvailable = isPatchAvailable;
                 doRequest();
-            }             
+            },
+            true             
           );
       } else doRequest();
     });
