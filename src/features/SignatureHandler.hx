@@ -103,6 +103,7 @@ class SignatureHandler implements SignatureHelpProvider
       var byte_pos = Tool.byte_pos(text, char_pos);
 
       return new Thenable<SignatureHelp>(function(resolve) {
+          var trying = 1;
           function make_request() {
             var cl = client.cmdLine.save()
             .cwd(hxContext.projectDir)
@@ -113,8 +114,15 @@ class SignatureHandler implements SignatureHelpProvider
             client.sendAll(
                 function(s, message, err){
                     if (err!=null) {
-                        err.message.displayAsError();
-                        resolve(null);
+                        if (trying <= 0) {
+                            err.message.displayAsError();
+                            resolve(null);
+                        } else {
+                            trying--;
+                            hxContext.launchServer().then(function(port){
+                                make_request(); 
+                            });
+                        }
                     } else {
                         if (message.severity==MessageSeverity.Error) {
                             hxContext.applyDiagnostics(message);

@@ -58,45 +58,45 @@ class HaxeContext  {
         context.subscriptions.push(cast this);
     }
     public function init() {
-        return launchServer().then(function (port) {
-            client.port = port;
-            configuration.haxeServerPort = port;
-
-            projectDir = Vscode.workspace.rootPath;
-
-#if DO_FULL_PATCH
-#else
-            changeDebouncer = new Debouncer<TextDocumentChangeEvent>(250, changePatchs);
-            context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument(changePatch));
-#end
-
-            // remove the patch if the document is opened, saved, or closed
-            context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument(removeAndDiagnoseDocument));    
-            context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument(removeAndDiagnoseDocument));
-            context.subscriptions.push(Vscode.workspace.onDidCloseTextDocument(onCloseDocument));
-
-            completionHandler = new CompletionHandler(this);
-            definitionHandler = new DefinitionHandler(this);     
-            signatureHandler = new SignatureHandler(this);     
-            
-            'Using ${ client.isPatchAvailable ? "--patch" : "non-patching" } completion server at ${configuration.haxeServerHost} on port $port'.displayAsInfo();
-
-            return port;     
-      });
-    }
-    function makeClient() {
-        var host = configuration.haxeServerHost;
-        var port = configuration.haxeServerPort;
-        return new HaxeClient(host, port);        
-    }
-    function launchServer() {
         var host = configuration.haxeServerHost;
         var port = configuration.haxeServerPort;
         client = new HaxeClient(host, port);
+        
+        projectDir = Vscode.workspace.rootPath;
 
+#if DO_FULL_PATCH
+#else
+        changeDebouncer = new Debouncer<TextDocumentChangeEvent>(250, changePatchs);
+        context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument(changePatch));
+#end
+        // remove the patch if the document is opened, saved, or closed
+        context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument(removeAndDiagnoseDocument));    
+        context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument(removeAndDiagnoseDocument));
+        context.subscriptions.push(Vscode.workspace.onDidCloseTextDocument(onCloseDocument));
+
+        completionHandler = new CompletionHandler(this);
+        definitionHandler = new DefinitionHandler(this);
+        signatureHandler = new SignatureHandler(this);     
+        
+        return launchServer();
+    }
+    public function launchServer() {
+        var host = configuration.haxeServerHost;
+        var port = configuration.haxeServerPort;
+
+        client.host = host;
+        client.port = port;
+        
         return new Promise<Int>(function (resolve, reject){
             function onData(data) {
-                if (data.isHaxeServer) return resolve(port);
+                if (data.isHaxeServer) {
+                    configuration.haxeServerPort = port;
+                    client.port = port;
+
+                    'Using ${ client.isPatchAvailable ? "--patch" : "non-patching" } completion server at ${configuration.haxeServerHost} on port $port'.displayAsInfo();
+
+                    return resolve(port);
+                }
                 if (data.isServerAvailable) {
                     port ++;
                     client.patchAvailable(onData);
@@ -104,7 +104,6 @@ class HaxeContext  {
                     if (haxeProcess!=null) haxeProcess.kill("SIGKILL");
                     haxeProcess = ChildProcess.spawn(configuration.haxeExec, ["--wait", '$port']);
                     if (haxeProcess.pid > 0)  {
-                        configuration.haxeServerPort = port;
                         client.patchAvailable(onData);
                     }
                     haxeProcess.on("error", function(err){
@@ -190,21 +189,36 @@ class HaxeContext  {
         diagnostics.delete(untyped document.uri);
         var path:String = document.uri.fsPath;
         lastModifications.remove(path);
-        var cl = client.cmdLine.save()
-            .cwd(projectDir)
-            .hxml(configuration.haxeDefaultBuildFile)
-            .noOutput()
-        ;
-        if (client.isPatchAvailable) {
-            cl.beginPatch(path).remove();
+        
+        var trying = 1;
+        
+        function diagnose() {
+            var cl = client.cmdLine.save()
+                .cwd(projectDir)
+                .hxml(configuration.haxeDefaultBuildFile)
+                .noOutput()
+            ;
+            if (client.isPatchAvailable) {
+                cl.beginPatch(path).remove();
+            }
+            client.sendAll(
+                function(s, message, err){
+                    if (err!=null) {
+                        if (trying <= 0) err.message.displayAsError();
+                        else {
+                            trying--;
+                            launchServer().then(function (port){
+                                diagnose();
+                            });
+                        }
+                    }
+                    else applyDiagnostics(message);
+                },
+                true
+            );
         }
-        client.sendAll(
-            function(s, message, err){
-                if (err!=null) err.message.displayAsError();
-                else applyDiagnostics(message);
-            },
-            true
-        );
+
+        diagnose();
     }   
 #if DO_FULL_PATCH
 #else

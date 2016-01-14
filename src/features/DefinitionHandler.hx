@@ -64,6 +64,7 @@ class DefinitionHandler implements DefinitionProvider
       var byte_pos = Tool.byte_pos(text, char_pos);
  
       return new Thenable<Definition>( function(resolve:Definition->Void) {
+          var trying = 1;
           function make_request() {
             var cl = client.cmdLine.save()
             .cwd(hxContext.projectDir)
@@ -74,8 +75,15 @@ class DefinitionHandler implements DefinitionProvider
             var step = 1;
             function parse(s, message, err:js.Error) {
                 if (err!=null) {
-                    err.message.displayAsError();
-                    resolve(null);
+                    if (trying <= 0) {
+                        err.message.displayAsError();
+                        resolve(null);
+                    } else {
+                        trying--;
+                        hxContext.launchServer().then(function(port){
+                            make_request();
+                        });
+                    }
                 } else {
                     if (message.severity==MessageSeverity.Error) {
                         hxContext.applyDiagnostics(message);

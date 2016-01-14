@@ -128,6 +128,8 @@ class CompletionHandler implements CompletionItemProvider
     var byte_pos = Tool.byte_pos(text, char_pos);
 
     return new Thenable<Array<CompletionItem>>(function(resolve) {
+      var trying = 1;
+
       function make_request() {
           var cl = client.cmdLine.save()
           .cwd(hxContext.projectDir)
@@ -139,8 +141,15 @@ class CompletionHandler implements CompletionItemProvider
           client.sendAll(
               function (s, message, err) {
                 if (err != null) {
-                    err.message.displayAsError();
-                    resolve([]);                
+                    if (trying <= 0) {
+                        err.message.displayAsError();
+                        resolve([]);
+                    } else {
+                        trying--;
+                        hxContext.launchServer().then(function(port) {
+                           make_request(); 
+                        });
+                    }                
                 } else {
                     resolve(parse_items(message));
                 }

@@ -79,7 +79,7 @@ class Info {
 }
 
 class HaxeClient {
-    public var host(default, null):String;
+    public var host:String;
     public var port:Int;
     public var cmdLine(default, null):HaxeCmdLine;
     public var isServerAvailable:Bool;
