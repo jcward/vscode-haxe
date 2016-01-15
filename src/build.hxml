@@ -1,0 +1,6 @@
+-cp ../src
+-cp ../vscode-extern
+-js haxe.js
+-D js-es5
+-lib hxnodejs
+Main
