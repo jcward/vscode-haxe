@@ -10,6 +10,12 @@ import Socket.Error;
 
 typedef Message = {stdout:Array<String>, stderr:Array<String>, infos:Array<Info>, severity:MessageSeverity};
 
+typedef Meta = {prefix:String, name:String, doc:String};
+typedef Define = {name:String, doc:String};
+typedef Option = {>Meta, param:String};
+
+typedef Job = {run:Void->Void, id:String};
+
 class RangeInfo {
     public var isLineRange:Bool;
     public var start:Int;
@@ -85,14 +91,29 @@ class HaxeClient {
     public var isServerAvailable:Bool;
     public var isPatchAvailable:Bool;
     public var isHaxeServer:Bool;
+    public var version:String;
+    public var options:Array<Option>;
+    public var defines:Array<Define>;
+    public var metas:Array<Meta>;
+
+    var queue:Array<Job>;
+    var working:Bool;
     
     public function new(host:String, port:Int) {
         this.host = host;
         this.port = port;
+        cmdLine = new HaxeCmdLine();
+        queue = [];
+        working = false;
+        resetInfos();
+    }
+    function resetInfos() {
+        options = [];
+        defines = [];
+        metas = [];
         isHaxeServer = false;
         isPatchAvailable = false;
-        isServerAvailable = false;
-        cmdLine = new HaxeCmdLine();
+        isServerAvailable = false;        
     }
     /*
     public function clone() {
@@ -109,57 +130,86 @@ class HaxeClient {
     public function clear() {
         cmdLine.clear();
     }
-    public function sendAll(onClose:Null<Socket->Message->Null<Error>->Void>, ?restoreCmdLine=false) {
+    public function sendAll(onClose:Null<Socket->Message->Null<Error>->Void>, ?restoreCmdLine=false, ?id:String=null) {
         var cmds = cmdLine.get_cmds();
         cmdLine.clearPatch();
         var workingDir = cmdLine.workingDir;
         
         if (restoreCmdLine) cmdLine.restore();
         
-        var s = new Socket();
-        s.connect(host, port,
-            function(s) {
-                s.write(cmds);
-                s.write("\x00");
-            }, 
-            null, null,
-            function (s) {
-                isServerAvailable = (s.error == null);
-
-                clear();
-                
-                if (onClose != null) {
-                    var stdout = [];
-                    var stderr = [];
-                    var infos = [];
-
-                    var hasError = false;
-                    var nl = "\n";
+        function run() {
+            working = true;
     
-                    for (line in s.datas.join("").split(nl)) {
-                        switch (line.charCodeAt(0)) {
-                            case 0x01: stdout.push(line.substr(1).split("\x01").join(nl));
-                            case 0x02: hasError = true;
-                            default:
-                                stderr.push(line);
-                                var info = haxe.Info.decode(line, workingDir);
-                                if (info != null) infos.push(info.info);
+            var s = new Socket();
+            s.connect(host, port,
+                function(s) {
+                    s.write(cmds);
+                    s.write("\x00");
+                }, 
+                null, null,
+                function (s) {
+                    working = false;
+                    isServerAvailable = (s.error == null);
+
+                    clear();
+                    
+                    if (onClose != null) {
+                        var stdout = [];
+                        var stderr = [];
+                        var infos = [];
+
+                        var hasError = false;
+                        var nl = "\n";
+        
+                        for (line in s.datas.join("").split(nl)) {
+                            switch (line.charCodeAt(0)) {
+                                case 0x01: stdout.push(line.substr(1).split("\x01").join(nl));
+                                case 0x02: hasError = true;
+                                default:
+                                    stderr.push(line);
+                                    var info = haxe.Info.decode(line, workingDir);
+                                    if (info != null) infos.push(info.info);
+                            }
                         }
+                        var severity = hasError?MessageSeverity.Error:MessageSeverity.Warning;
+                        onClose(s, {stdout:stdout, stderr:stderr, infos:infos, severity:severity}, s.error);
                     }
-                    var severity = hasError?MessageSeverity.Error:MessageSeverity.Warning;
-                    onClose(s, {stdout:stdout, stderr:stderr, infos:infos, severity:severity}, s.error);
+                    runQueue();
                 }
+            );
+        }
+        var job = {run:run, id:id};
+        queue.push(job);
+        if (!working) runQueue();
+    }
+    function runQueue() {
+        if (queue.length==0) return;
+        var job:Job=queue.shift();
+        var id = job.id;
+        if (id!=null) {
+            var oq = queue;
+            queue = [];
+            while(oq.length > 0) {
+                var nj = oq.shift();
+                if (nj.id==id) job = nj;
+                else queue.push(nj);               
             }
-        );
- 
-        return s;
+        }
+        if (job != null) {
+            //trace('running ${id} ${Date.now()}');
+            job.run();
+        }
     }
     public static function isOptionExists(optionName:String, data:String) {
         var re = new EReg("unknown option '"+optionName+"'", "");
  
         return !re.match(data);
     }
-    static var reVersion = ~/(\d+).(\d+).(\d+)(.+)?/;
+    static var reVersion = ~/^Haxe\s+(.+?)(\d+).(\d+).(\d+)(.+)?/;
+    static var reCheckOption = ~/^\s*(-(-)?)(.+?) : (.+)/;
+    static var reCheckOptionName = ~/([^\s]+)(\s+(.+))?/;
+    static var reCheckDefine = ~/^\s*([^\s]+)\s+: (.+)/;
+    static var reCheckMeta = ~/^\s*(@:)([^\s]+)\s+: (.+)/;
     public function setStatus(message:Message, error:Null<Error>) {
         isServerAvailable = (error == null);
         isPatchAvailable = false;
@@ -171,20 +221,90 @@ class HaxeClient {
         }
         return this;
     }
+    public function infos(onData:Null<HaxeClient->Void>) {
+        resetInfos();
+
+        var step = 0;
+        function next() {
+            cmdLine.save();
+            switch(step) {
+                case 0:
+                    cmdLine.help();
+                case 1:
+                    cmdLine.helpDefines();
+                case 2:
+                    cmdLine.helpMetas();
+            }
+            sendAll(
+                function(s, message, error) {
+                    var abort = true;
+                    isServerAvailable = (error == null);
+                    if (isServerAvailable) {
+                        switch(step) {
+                            case 0:
+                                var datas = message.stderr;
+                                if (datas.length > 0) {
+                                    version = datas.shift();
+                                    isHaxeServer = reVersion.match(version);
+                                    abort = !isHaxeServer;
+                                    if (isHaxeServer) {
+                                        for (data in datas) {
+                                            if (reCheckOption.match(data)) {
+                                                if (reCheckOptionName.match(reCheckOption.matched(3))) {
+                                                    var name = reCheckOptionName.matched(1);
+                                                    isPatchAvailable = isPatchAvailable || (name=="patch");
+                                                    options.push({prefix:reCheckOption.matched(1), name:name, doc:reCheckOption.matched(4), param:reCheckOptionName.matched(3)});
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            case 1:
+                                var datas = message.stdout;
+                                abort = (datas.length <= 0);
+                                for (data in datas) {
+                                    if (reCheckDefine.match(data)) {
+                                        defines.push({name:reCheckDefine.matched(1), doc:reCheckDefine.matched(2)});
+                                    }
+                                }
+                            case 2:
+                                var datas = message.stdout;
+                                abort = (datas.length <= 0);
+                                for (data in datas) {
+                                    if (reCheckMeta.match(data)) {
+                                        metas.push({prefix:reCheckMeta.matched(1), name:reCheckMeta.matched(2), doc:reCheckMeta.matched(3)});
+                                    }
+                                }
+                        }
+                    }
+                    if (abort) {
+                        //trace(options);
+                        //trace(defines);
+                        //trace(metas);
+                        if (onData!=null) onData(this);
+                    } else {
+                        step++;
+                        next();
+                    }
+                },
+                true
+            );
+        }
+        next();
+    }
     public function patchAvailable(onData:Null<HaxeClient->Void>) {
-        cmdLine.save();
-        
-        cmdLine
-            .version()
-            .beginPatch('~.hx')
-            .remove();
+        cmdLine.save()
+        .version()
+        .beginPatch('~.hx')
+        .remove()
+        ;
 
         sendAll(
             function (s:Socket, message:Message, error:Null<Error>) {
-                cmdLine.restore();
                 setStatus(message, error);
                 if (onData!=null) onData(this);
-            }
+            },
+            true
         );
     }
 }

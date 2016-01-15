@@ -86,6 +86,18 @@ class HaxeCmdLine {
         unique.set("--display", '$fileName@${pos}$dm');
         return this;
     }
+    public function help():HaxeCmdLine {
+        unique.set("--help", "");
+        return this;       
+    }
+    public function helpDefines():HaxeCmdLine {
+        unique.set("--help-defines", "");
+        return this;       
+    }
+    public function helpMetas():HaxeCmdLine {
+        unique.set("--help-metas", "");
+        return this;       
+    }
     public function custom(argName:String, data:String, ?is_unique=true):HaxeCmdLine {
         if (is_unique) unique.set(argName, data);
         else cmds.push('$argName $data');

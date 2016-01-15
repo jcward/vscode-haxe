@@ -24,7 +24,7 @@ class CompletionHandler implements CompletionItemProvider
       
       var context = hxContext.context;
             
-      var disposable = Vscode.languages.registerCompletionItemProvider(HaxeContext.languageID(), this, '.');
+      var disposable = Vscode.languages.registerCompletionItemProvider(HaxeContext.languageID(), this, '.', ':');
       context.subscriptions.push(disposable);
   }
   
@@ -122,18 +122,32 @@ class CompletionHandler implements CompletionItemProvider
     if (isDot) {
         if (delta > 150) makeCall = true;
     }
-    
-    if (!makeCall)
-        return new Thenable<Array<CompletionItem>>(function(resolve) {resolve([]);});
-        
+    if (!makeCall) {
+        var items = [];
+        // metadata completion
+        if ((lastChar == ':') && (text.charAt(char_pos-2)=="@")) {
+            for (data in hxContext.client.metas) {
+                var ci = new Vscode.CompletionItem(data.name);
+                ci.documentation = data.doc;
+                items.push(ci);
+            }
+            hxContext.cancelDiagnostic();
+        }
+        return new Thenable<Array<CompletionItem>>(function(resolve) {resolve(items);});
+    }
+ 
     if (!isDot) displayMode = haxe.HaxeCmdLine.DisplayMode.Position;
 
     var byte_pos = Tool.byte_pos(text, char_pos);
+    
+    hxContext.cancelDiagnostic();
 
     return new Thenable<Array<CompletionItem>>(function(resolve) {
       var trying = 1;
 
       function make_request() {
+          hxContext.cancelDiagnostic();
+
           var cl = client.cmdLine.save()
           .cwd(hxContext.projectDir)
           .define("display-details")
@@ -157,7 +171,8 @@ class CompletionHandler implements CompletionItemProvider
                     resolve(parse_items(message));
                 }
              },
-             true
+             true,
+             "completion"
           );
       }
 

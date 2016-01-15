@@ -48,7 +48,6 @@ class HaxeContext  {
 
     public var documentsState(default, null):Map<String, DocumentState>;
 
-//    public var decoration(default, null):decorator.HaxeDecoration
     public function new(context:ExtensionContext) {
         this.context = context;
         haxeProcess = null;
@@ -59,7 +58,7 @@ class HaxeContext  {
         
         diagnostics =  Vscode.languages.createDiagnosticCollection(languageID());
         context.subscriptions.push(cast diagnostics);
-        
+
         documentsState = new Map<String, DocumentState>();
 
         maxLastDiagnoseTime = 0;
@@ -69,6 +68,10 @@ class HaxeContext  {
         checkTimer.run = check;
         
         context.subscriptions.push(cast this);
+    }
+    public function cancelDiagnostic() {
+        checkDiagnostic = false;
+        maxLastDiagnoseTime = getTime();
     }
     function check() {
         var time = getTime();
@@ -101,7 +104,7 @@ class HaxeContext  {
 
 #if DO_FULL_PATCH
 #else
-        changeDebouncer = new Debouncer<TextDocumentChangeEvent>(250, changePatchs);
+        changeDebouncer = new Debouncer<TextDocumentChangeEvent>(300, changePatchs);
         context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument(changePatch));
 #end
         // remove the patch if the document is opened, saved, or closed
@@ -123,6 +126,7 @@ class HaxeContext  {
         client.port = port;
         
         return new Promise<Int>(function (resolve, reject){
+            var incPort = 0;
             function onData(data) {
                 if (data.isHaxeServer) {
                     configuration.haxeServerPort = port;
@@ -131,15 +135,15 @@ class HaxeContext  {
                     'Using ${ client.isPatchAvailable ? "--patch" : "non-patching" } completion server at ${configuration.haxeServerHost} on port $port'.displayAsInfo();
 
                     return resolve(port);
-                }
-                if (data.isServerAvailable) {
-                    port ++;
-                    client.patchAvailable(onData);
                 } else {
                     if (haxeProcess!=null) haxeProcess.kill("SIGKILL");
+                    port += incPort;
+                    incPort = 1;
                     haxeProcess = ChildProcess.spawn(configuration.haxeExec, ["--wait", '$port']);
                     if (haxeProcess.pid > 0)  {
-                        client.patchAvailable(onData);
+                        client.port = port;
+                        client.infos(onData);
+//                        client.patchAvailable(onData);
                     }
                     haxeProcess.on("error", function(err){
                         haxeProcess = null;
@@ -148,8 +152,8 @@ class HaxeContext  {
                     });
                 }
             }
-
-            client.patchAvailable(onData);            
+            client.infos(onData);
+//            client.patchAvailable(onData);            
         });
     }
     function dispose():Dynamic {
@@ -265,7 +269,8 @@ class HaxeContext  {
                 }
                 else applyDiagnostics(message);
             },
-            true
+            true,
+            "diagnose"
         );
     }
     public function removeAndDiagnoseDocument(document) {
@@ -341,6 +346,8 @@ class HaxeContext  {
             }
         }
         
+        diagnostics.delete(untyped document.uri);
+
         if (changed) {
             client.sendAll(
                 function (s, message, error) {
