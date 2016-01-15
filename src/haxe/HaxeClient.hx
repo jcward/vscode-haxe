@@ -93,7 +93,9 @@ class HaxeClient {
     public var isHaxeServer:Bool;
     public var version:String;
     public var options:Array<Option>;
+    public var optionsByName:Map<String, Option>;
     public var defines:Array<Define>;
+    public var definesByName:Map<String, Define>;
     public var metas:Array<Meta>;
 
     var queue:Array<Job>;
@@ -111,6 +113,8 @@ class HaxeClient {
         options = [];
         defines = [];
         metas = [];
+        optionsByName = new Map<String, Option>();
+        definesByName = new Map<String, Define>();
         isHaxeServer = false;
         isPatchAvailable = false;
         isServerAvailable = false;        
@@ -253,7 +257,9 @@ class HaxeClient {
                                                 if (reCheckOptionName.match(reCheckOption.matched(3))) {
                                                     var name = reCheckOptionName.matched(1);
                                                     isPatchAvailable = isPatchAvailable || (name=="patch");
-                                                    options.push({prefix:reCheckOption.matched(1), name:name, doc:reCheckOption.matched(4), param:reCheckOptionName.matched(3)});
+                                                    var option = {prefix:reCheckOption.matched(1), name:name, doc:reCheckOption.matched(4), param:reCheckOptionName.matched(3)};
+                                                    options.push(option);
+                                                    optionsByName.set(name, option);
                                                 }
                                             }
                                         }
@@ -264,7 +270,9 @@ class HaxeClient {
                                 abort = (datas.length <= 0);
                                 for (data in datas) {
                                     if (reCheckDefine.match(data)) {
-                                        defines.push({name:reCheckDefine.matched(1), doc:reCheckDefine.matched(2)});
+                                        var define = {name:reCheckDefine.matched(1), doc:reCheckDefine.matched(2)};
+                                        defines.push(define);
+                                        definesByName.set(define.name, define);
                                     }
                                 }
                             case 2:

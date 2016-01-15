@@ -3,6 +3,7 @@ import haxe.ds.Either;
 import haxe.Constraints.Function;
 
 import HaxeContext;
+import HxmlContext;
 import haxe.HaxeClient;
 import haxe.HaxeClient.Message;
 using Tool;
@@ -17,6 +18,8 @@ class Main {
 	static function main(context:ExtensionContext) {
         var hc = new HaxeContext(context);
         hc.init();
+        
+        new HxmlContext(hc);
         
         // test_register_command(context);
 

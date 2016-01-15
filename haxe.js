@@ -346,10 +346,51 @@ HxOverrides.iter = function(a) {
 		return this.arr[this.cur++];
 	}};
 };
+var HxmlContext = function(hxContext) {
+	this.hxContext = hxContext;
+	hxContext.context.subscriptions.push(Vscode.languages.registerHoverProvider("hxml",{ provideHover : $bind(this,this.onHover)}));
+};
+HxmlContext.__name__ = true;
+HxmlContext.languageID = function() {
+	return "hxml";
+};
+HxmlContext.prototype = {
+	onHover: function(document,position,cancelToken) {
+		var sHover = "";
+		var client = this.hxContext.client;
+		if(client != null) {
+			var text = document.lineAt(position).text;
+			if(HxmlContext.reCheckOption.match(text)) {
+				var prefix = HxmlContext.reCheckOption.matched(1);
+				var name = HxmlContext.reCheckOption.matched(3);
+				var param = HxmlContext.reCheckOption.matched(5);
+				if(prefix == "-" && name == "D") {
+					if(HxmlContext.reDefineParam.match(param)) {
+						var defineName = HxmlContext.reDefineParam.matched(1);
+						var tmp;
+						var _this = client.definesByName;
+						if(__map_reserved[defineName] != null) tmp = _this.getReserved(defineName); else tmp = _this.h[defineName];
+						var define = tmp;
+						if(define != null) sHover = define.doc;
+					}
+				} else {
+					var tmp1;
+					var _this1 = client.optionsByName;
+					if(__map_reserved[name] != null) tmp1 = _this1.getReserved(name); else tmp1 = _this1.h[name];
+					var option = tmp1;
+					if(option != null) sHover = option.doc;
+				}
+			} else if(HxmlContext.reMain.match(text)) sHover = "Main file : " + HxmlContext.reMain.matched(1);
+		}
+		return new Vscode.Hover(sHover);
+	}
+};
 var Main = function() { };
 Main.__name__ = true;
 Main.main = $hx_exports["activate"] = function(context) {
-	new HaxeContext(context).init();
+	var hc = new HaxeContext(context);
+	hc.init();
+	new HxmlContext(hc);
 };
 Main.test_register_command = function(context) {
 	context.subscriptions.push(Vscode.commands.registerCommand("haxe.hello",function() {
@@ -971,6 +1012,8 @@ haxe_HaxeClient.prototype = {
 		this.options = [];
 		this.defines = [];
 		this.metas = [];
+		this.optionsByName = new haxe_ds_StringMap();
+		this.definesByName = new haxe_ds_StringMap();
 		this.isHaxeServer = false;
 		this.isPatchAvailable = false;
 		this.isServerAvailable = false;
@@ -1090,7 +1133,10 @@ haxe_HaxeClient.prototype = {
 									if(haxe_HaxeClient.reCheckOptionName.match(haxe_HaxeClient.reCheckOption.matched(3))) {
 										var name = haxe_HaxeClient.reCheckOptionName.matched(1);
 										_g.isPatchAvailable = _g.isPatchAvailable || name == "patch";
-										_g.options.push({ prefix : haxe_HaxeClient.reCheckOption.matched(1), name : name, doc : haxe_HaxeClient.reCheckOption.matched(4), param : haxe_HaxeClient.reCheckOptionName.matched(3)});
+										var option = { prefix : haxe_HaxeClient.reCheckOption.matched(1), name : name, doc : haxe_HaxeClient.reCheckOption.matched(4), param : haxe_HaxeClient.reCheckOptionName.matched(3)};
+										_g.options.push(option);
+										var _this = _g.optionsByName;
+										if(__map_reserved[name] != null) _this.setReserved(name,option); else _this.h[name] = option;
 									}
 								}
 							}
@@ -1104,7 +1150,13 @@ haxe_HaxeClient.prototype = {
 					while(_g11 < datas1.length) {
 						var data1 = datas1[_g11];
 						++_g11;
-						if(haxe_HaxeClient.reCheckDefine.match(data1)) _g.defines.push({ name : haxe_HaxeClient.reCheckDefine.matched(1), doc : haxe_HaxeClient.reCheckDefine.matched(2)});
+						if(haxe_HaxeClient.reCheckDefine.match(data1)) {
+							var define = { name : haxe_HaxeClient.reCheckDefine.matched(1), doc : haxe_HaxeClient.reCheckDefine.matched(2)};
+							_g.defines.push(define);
+							var _this1 = _g.definesByName;
+							var key = define.name;
+							if(__map_reserved[key] != null) _this1.setReserved(key,define); else _this1.h[key] = define;
+						}
 					}
 					break;
 				case 2:
@@ -1571,6 +1623,9 @@ String.__name__ = true;
 Array.__name__ = true;
 Date.__name__ = ["Date"];
 var __map_reserved = {}
+HxmlContext.reCheckOption = new EReg("^\\s*(-(-)?)([^\\s]+)(\\s+(.*))?","");
+HxmlContext.reDefineParam = new EReg("([^=]+)(=(.+))?","");
+HxmlContext.reMain = new EReg("\\s*(.+)","");
 features_CompletionHandler.reI = new EReg("<i n=\"([^\"]+)\" k=\"([^\"]+)\"( ip=\"([0-1])\")?( f=\"(\\d+)\")?><t>([^<]*)</t><d>([^<]*)</d></i>","");
 features_CompletionHandler.reGT = new EReg("&gt;","g");
 features_CompletionHandler.reLT = new EReg("&lt;","g");
