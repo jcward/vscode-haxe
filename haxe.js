@@ -67,7 +67,9 @@ HaxeContext.prototype = {
 						var document = ds.document;
 						if(ds.isDirty) {
 							isDirty = true;
-							if(document != null) document.save();
+							if(document != null) {
+								if(document.languageId == "haxe") document.save();
+							}
 						}
 					}
 					if(!isDirty) this.diagnose(1);
@@ -348,14 +350,21 @@ HxOverrides.iter = function(a) {
 };
 var HxmlContext = function(hxContext) {
 	this.hxContext = hxContext;
-	hxContext.context.subscriptions.push(Vscode.languages.registerHoverProvider("hxml",{ provideHover : $bind(this,this.onHover)}));
+	this.hxContext.context.subscriptions.push(Vscode.languages.registerHoverProvider("hxml",{ provideHover : $bind(this,this.onHover)}));
+	new features_hxml_CompletionHandler(this);
 };
 HxmlContext.__name__ = true;
 HxmlContext.languageID = function() {
 	return "hxml";
 };
 HxmlContext.prototype = {
-	onHover: function(document,position,cancelToken) {
+	get_context: function() {
+		return this.hxContext.context;
+	}
+	,get_client: function() {
+		return this.hxContext.client;
+	}
+	,onHover: function(document,position,cancelToken) {
 		var sHover = "";
 		var client = this.hxContext.client;
 		if(client != null) {
@@ -939,6 +948,83 @@ features_SignatureHandler.prototype = {
 		});
 	}
 };
+var features_hxml_CompletionHandler = function(hxmlContext) {
+	this.hxmlContext = hxmlContext;
+	hxmlContext.hxContext.context.subscriptions.push(Vscode.languages.registerCompletionItemProvider("hxml",this,"-","D"," "));
+};
+features_hxml_CompletionHandler.__name__ = true;
+features_hxml_CompletionHandler.__interfaces__ = [CompletionItemProvider];
+features_hxml_CompletionHandler.prototype = {
+	provideCompletionItems: function(document,position,cancelToken) {
+		var items = [];
+		var client = this.hxmlContext.hxContext.client;
+		if(client != null) {
+			var text = document.lineAt(position).text;
+			var char_pos = position.character - 1;
+			switch(text.charAt(char_pos)) {
+			case "-":
+				switch(char_pos) {
+				case 0:
+					var _g = 0;
+					var _g1 = client.options;
+					while(_g < _g1.length) {
+						var data = _g1[_g];
+						++_g;
+						var ci = new Vscode.CompletionItem(HxOverrides.substr(data.prefix,1,null) + data.name);
+						ci.documentation = data.doc;
+						items.push(ci);
+					}
+					break;
+				case 1:
+					var _g2 = 0;
+					var _g12 = client.options;
+					while(_g2 < _g12.length) {
+						var data2 = _g12[_g2];
+						++_g2;
+						if(data2.prefix.length < 2) continue;
+						var ci2 = new Vscode.CompletionItem(data2.name);
+						ci2.documentation = data2.doc;
+						items.push(ci2);
+					}
+					break;
+				}
+				break;
+			case "D":
+				if(char_pos == 1 && text.charAt(char_pos - 1) == "-") {
+					var _g3 = 0;
+					var _g13 = client.defines;
+					while(_g3 < _g13.length) {
+						var data3 = _g13[_g3];
+						++_g3;
+						var ci3 = new Vscode.CompletionItem("D " + data3.name);
+						ci3.documentation = data3.doc;
+						items.push(ci3);
+					}
+				}
+				break;
+			case " ":
+				if(char_pos == 2 && HxOverrides.substr(text,0,char_pos) == "-D") {
+					var _g4 = 0;
+					var _g14 = client.defines;
+					while(_g4 < _g14.length) {
+						var data4 = _g14[_g4];
+						++_g4;
+						var ci4 = new Vscode.CompletionItem(data4.name);
+						ci4.documentation = data4.doc;
+						items.push(ci4);
+					}
+				}
+				break;
+			}
+		}
+		return new Promise(function(resolve) {
+			resolve(items);
+		});
+	}
+	,resolveCompletionItem: function(item,cancelToken) {
+		return item;
+	}
+};
 var haxe_IMap = function() { };
 haxe_IMap.__name__ = true;
 var haxe_RangeInfo = function(s,e,isLineRange) {
@@ -1095,6 +1181,9 @@ haxe_HaxeClient.prototype = {
 			if(message.stderr.length > 0) this.isHaxeServer = haxe_HaxeClient.reVersion.match(message.stderr[0]);
 		}
 		return this;
+	}
+	,unformatDoc: function(s) {
+		return s;
 	}
 	,infos: function(onData) {
 		var _g = this;
@@ -1634,12 +1723,16 @@ features_DefinitionHandler.rePos = new EReg("[^<]*<pos>(.+)</pos>.*","");
 features_SignatureHandler.reType = new EReg("<type(\\s+opar='(\\d+)')?(\\s+index='(\\d+)')?>","");
 features_SignatureHandler.reGT = new EReg("&gt;","g");
 features_SignatureHandler.reLT = new EReg("&lt;","g");
+features_hxml_CompletionHandler.reI = new EReg("<i n=\"([^\"]+)\" k=\"([^\"]+)\"( ip=\"([0-1])\")?( f=\"(\\d+)\")?><t>([^<]*)</t><d>([^<]*)</d></i>","");
+features_hxml_CompletionHandler.reGT = new EReg("&gt;","g");
+features_hxml_CompletionHandler.reLT = new EReg("&lt;","g");
+features_hxml_CompletionHandler.reMethod = new EReg("Void|Unknown","");
 haxe_Info.reWin = new EReg("^\\w+:\\\\","");
 haxe_Info.re1 = new EReg("^((\\w+:\\\\)?([^:]+)):(\\d+):\\s*([^:]+)(:(.+))?","");
 haxe_Info.re2 = new EReg("^((character[s]?)|(line[s]?))\\s+(\\d+)(\\-(\\d+))?","");
 haxe_HaxeClient.reVersion = new EReg("^Haxe\\s+(.+?)(\\d+).(\\d+).(\\d+)(.+)?","");
-haxe_HaxeClient.reCheckOption = new EReg("^\\s*(-(-)?)(.+?) : (.+)","");
+haxe_HaxeClient.reCheckOption = new EReg("^\\s*(-(-)?)(.+?) : ([\\s\\S]+)","");
+haxe_HaxeClient.reCheckDefine = new EReg("^\\s*([^\\s]+)\\s+: ([\\s\\S]+)","");
+haxe_HaxeClient.reCheckMeta = new EReg("^\\s*(@:)([^\\s]+)\\s+: ([\\s\\S]+)","");
 haxe_HaxeClient.reCheckOptionName = new EReg("([^\\s]+)(\\s+(.+))?","");
-haxe_HaxeClient.reCheckDefine = new EReg("^\\s*([^\\s]+)\\s+: (.+)","");
-haxe_HaxeClient.reCheckMeta = new EReg("^\\s*(@:)([^\\s]+)\\s+: (.+)","");
 })(typeof window != "undefined" ? window : typeof exports != "undefined" ? exports : typeof self != "undefined" ? self : this);

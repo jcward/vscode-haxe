@@ -210,10 +210,16 @@ class HaxeClient {
         return !re.match(data);
     }
     static var reVersion = ~/^Haxe\s+(.+?)(\d+).(\d+).(\d+)(.+)?/;
-    static var reCheckOption = ~/^\s*(-(-)?)(.+?) : (.+)/;
+#if js
+    static var reCheckOption = ~/^\s*(-(-)?)(.+?) : ([\s\S]+)/;
+    static var reCheckDefine = ~/^\s*([^\s]+)\s+: ([\s\S]+)/;
+    static var reCheckMeta = ~/^\s*(@:)([^\s]+)\s+: ([\s\S]+)/;
+#else
+    static var reCheckOption = ~/^\s*(-(-)?)(.+?) : (.+)/s;
+    static var reCheckDefine = ~/^\s*([^\s]+)\s+: (.+)/s;
+    static var reCheckMeta = ~/^\s*(@:)([^\s]+)\s+: (.+)/s;
+#end
     static var reCheckOptionName = ~/([^\s]+)(\s+(.+))?/;
-    static var reCheckDefine = ~/^\s*([^\s]+)\s+: (.+)/;
-    static var reCheckMeta = ~/^\s*(@:)([^\s]+)\s+: (.+)/;
     public function setStatus(message:Message, error:Null<Error>) {
         isServerAvailable = (error == null);
         isPatchAvailable = false;
@@ -225,6 +231,7 @@ class HaxeClient {
         }
         return this;
     }
+    inline function unformatDoc(s:String) return s;
     public function infos(onData:Null<HaxeClient->Void>) {
         resetInfos();
 
@@ -257,7 +264,7 @@ class HaxeClient {
                                                 if (reCheckOptionName.match(reCheckOption.matched(3))) {
                                                     var name = reCheckOptionName.matched(1);
                                                     isPatchAvailable = isPatchAvailable || (name=="patch");
-                                                    var option = {prefix:reCheckOption.matched(1), name:name, doc:reCheckOption.matched(4), param:reCheckOptionName.matched(3)};
+                                                    var option = {prefix:reCheckOption.matched(1), name:name, doc:unformatDoc(reCheckOption.matched(4)), param:reCheckOptionName.matched(3)};
                                                     options.push(option);
                                                     optionsByName.set(name, option);
                                                 }
@@ -270,7 +277,7 @@ class HaxeClient {
                                 abort = (datas.length <= 0);
                                 for (data in datas) {
                                     if (reCheckDefine.match(data)) {
-                                        var define = {name:reCheckDefine.matched(1), doc:reCheckDefine.matched(2)};
+                                        var define = {name:reCheckDefine.matched(1), doc:unformatDoc(reCheckDefine.matched(2))};
                                         defines.push(define);
                                         definesByName.set(define.name, define);
                                     }
@@ -280,7 +287,7 @@ class HaxeClient {
                                 abort = (datas.length <= 0);
                                 for (data in datas) {
                                     if (reCheckMeta.match(data)) {
-                                        metas.push({prefix:reCheckMeta.matched(1), name:reCheckMeta.matched(2), doc:reCheckMeta.matched(3)});
+                                        metas.push({prefix:reCheckMeta.matched(1), name:reCheckMeta.matched(2), doc:unformatDoc(reCheckMeta.matched(3))});
                                     }
                                 }
                         }

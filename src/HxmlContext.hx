@@ -1,14 +1,25 @@
 import Vscode;
 
+import HaxeContext;
+import haxe.HaxeClient;
+
 class HxmlContext {
     public inline static function languageID() return "hxml";
 
     public var hxContext(default, null):HaxeContext;
+
+    public var context(get, null):ExtensionContext;
+    inline function get_context() return hxContext.context; 
+
+    public var client(get, null):HaxeClient;
+    inline function get_client() return hxContext.client;     
     
     public function new(hxContext) {
         this.hxContext = hxContext;
         var disposable = Vscode.languages.registerHoverProvider(languageID(), {provideHover:onHover});
-        hxContext.context.subscriptions.push(disposable);
+        context.subscriptions.push(disposable);
+        
+        new features.hxml.CompletionHandler(this);
     }
 
     static var reCheckOption = ~/^\s*(-(-)?)([^\s]+)(\s+(.*))?/;

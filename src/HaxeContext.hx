@@ -87,7 +87,9 @@ class HaxeContext  {
                         var document = ds.document;
                         if (ds.isDirty) {
                             isDirty = true;
-                            if (document != null) document.save();
+                            if (document != null) {
+                                if (document.languageId==languageID()) document.save();
+                            }
                         }
                     }
                     if (!isDirty) diagnose(1);
