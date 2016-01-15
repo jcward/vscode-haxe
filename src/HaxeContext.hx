@@ -20,7 +20,9 @@ import haxe.HaxePatcherCmd.PatcherUnit;
 import js.Promise;
 import js.node.ChildProcess;
 
-typedef DocumentState = {isDirty:Bool, lastModification:Float, lastDiagnostic:Float, path:String};
+import haxe.Timer;
+
+typedef DocumentState = {isDirty:Bool, lastModification:Float, lastDiagnostic:Float, path:String, document:TextDocument};
 
 class HaxeContext  {
     public static inline function languageID() return "haxe";
@@ -34,6 +36,10 @@ class HaxeContext  {
     public var configuration:HaxeConfigurationObject;
     public var projectDir(default, null):String;
     var haxeProcess:Null<js.node.child_process.ChildProcess>;
+
+    var checkTimer:Timer;
+    var maxLastDiagnoseTime:Float;
+    var checkDiagnostic:Bool;
 
 #if DO_FULL_PATCH
 #else
@@ -56,7 +62,35 @@ class HaxeContext  {
         
         documentsState = new Map<String, DocumentState>();
 
+        maxLastDiagnoseTime = 0;
+        checkDiagnostic = false;
+        
+        checkTimer = new Timer(50);
+        checkTimer.run = check;
+        
         context.subscriptions.push(cast this);
+    }
+    function check() {
+        var time = getTime();
+        if (checkDiagnostic) {
+            var dlt = time - maxLastDiagnoseTime;
+            if (dlt >= configuration.haxeDiagnosticDelay) {
+                checkDiagnostic = false;
+                if (client.isPatchAvailable) diagnose(1);
+                else {
+                    var isDirty = false;
+                    for (k in documentsState.keys()) {
+                        var ds = documentsState.get(k);
+                        var document = ds.document;
+                        if (ds.isDirty) {
+                            isDirty = true;
+                            if (document != null) document.save();
+                        }
+                    }
+                    if (!isDirty) diagnose(1);
+                }
+            }
+        }
     }
     public function init() {
         var host = configuration.haxeServerHost;
@@ -120,7 +154,10 @@ class HaxeContext  {
     }
     function dispose():Dynamic {
         Vscode.window.showInformationMessage("Got dispose!");
-
+        if (checkTimer!=null) {
+            checkTimer.stop();
+            checkTimer = null;
+        }
         if (client.isServerAvailable && client.isPatchAvailable) {
             client.clear();
             var cl = client.cmdLine;
@@ -143,6 +180,7 @@ class HaxeContext  {
     }
    
     public function applyDiagnostics(message:Message) {
+        checkDiagnostic = false;
         var all = new Map<String, Null<Array<Diagnostic>>>();            
         for (info in message.infos) {
             var diags = all.get(info.fileName);
@@ -175,6 +213,7 @@ class HaxeContext  {
             diagnostics.set(url, diags);
             var ds = getDocumentState(url.fsPath);
             ds.lastDiagnostic = getTime();
+            if (ds.lastDiagnostic > maxLastDiagnoseTime) maxLastDiagnoseTime = ds.lastDiagnostic;
         }
     }
     inline public function getTime() return Date.now().getTime();    
@@ -182,7 +221,7 @@ class HaxeContext  {
         var ds = documentsState.get(path);
         if (ds != null) return ds;
         var t = getTime();
-        ds = {path:path, isDirty:false, lastModification:t, lastDiagnostic:t};
+        ds = {path:path, isDirty:false, lastModification:t, lastDiagnostic:t, document:null};
         documentsState.set(path, ds);
         return ds;
     }
@@ -195,8 +234,10 @@ class HaxeContext  {
             diagnostics.delete(untyped document.uri);
         }      
     }
-    function onOpenDocument(document) {
+    function onOpenDocument(document:TextDocument) {
         var path:String = document.uri.fsPath;
+        var ds = getDocumentState(path);
+        ds.document = document;
         removeAndDiagnoseDocument(document);
     }
     function onSaveDocument(document) {
@@ -206,39 +247,35 @@ class HaxeContext  {
         ds.lastModification = getTime();
         removeAndDiagnoseDocument(document);        
     }
+    function diagnose(trying) {
+        var cl = client.cmdLine.save()
+        .cwd(projectDir)
+        .hxml(configuration.haxeDefaultBuildFile)
+        .noOutput()
+        ;
+        client.sendAll(
+            function(s, message, err){
+                if (err!=null) {
+                    if (trying <= 0) err.message.displayAsError();
+                    else {
+                        launchServer().then(function (port){
+                            diagnose(trying-1);
+                        });
+                    }
+                }
+                else applyDiagnostics(message);
+            },
+            true
+        );
+    }
     public function removeAndDiagnoseDocument(document) {
         diagnostics.delete(untyped document.uri);
         var path:String = document.uri.fsPath;
-        
-        var trying = 1;
-        
-        function diagnose() {
-            var cl = client.cmdLine.save()
-                .cwd(projectDir)
-                .hxml(configuration.haxeDefaultBuildFile)
-                .noOutput()
-            ;
-            if (client.isPatchAvailable) {
-                cl.beginPatch(path).remove();
-            }
-            client.sendAll(
-                function(s, message, err){
-                    if (err!=null) {
-                        if (trying <= 0) err.message.displayAsError();
-                        else {
-                            trying--;
-                            launchServer().then(function (port){
-                                diagnose();
-                            });
-                        }
-                    }
-                    else applyDiagnostics(message);
-                },
-                true
-            );
-        }
 
-        diagnose();
+        if (client.isPatchAvailable) {
+            client.cmdLine.beginPatch(path).remove();
+        }
+        diagnose(1);
     }   
 #if DO_FULL_PATCH
 #else
@@ -264,7 +301,7 @@ class HaxeContext  {
             var path = document.uri.fsPath;
             var len = path.length;
             
-            if (document.languageId != "haxe") continue;
+            if (document.languageId != languageID()) continue;
             
             var text = document.getText();
             
@@ -301,17 +338,18 @@ class HaxeContext  {
 
                 //cl.display(path, pos, haxe.HaxeCmdLine.DisplayMode.Position);
                 changed = true;
-            } 
+            }
         }
         
         if (changed) {
             client.sendAll(
                 function (s, message, error) {
-                    if (error==null) applyDiagnostics(message);        
+                    if (error==null) applyDiagnostics(message);
+                    checkDiagnostic = true;
                 },
                 true
             );
-        }
+        } else checkDiagnostic = true;
     }
     function changePatch(event:TextDocumentChangeEvent) {
         var document = event.document;
@@ -323,6 +361,7 @@ class HaxeContext  {
         }
         ds.isDirty = true;
         ds.lastModification = getTime();
+        ds.document = document;
         changeDebouncer.debounce(event);
     }
 #end

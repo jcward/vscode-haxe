@@ -45,7 +45,19 @@ class CompletionHandler implements CompletionItemProvider
           datas.shift();
           datas.pop();
           datas.pop();
-          for (data in datas) {
+          var len = datas.length;
+          var i = 0;
+          while (i<len) {
+              var tmp = datas[i++];
+              var data = "";
+              if (tmp.substr(0, 2)=="<i") {
+                  while (i<len) {
+                      data += tmp;
+                      if (tmp.substr(tmp.length-2, 2) == "i>") break;
+                      tmp = datas[i++];
+                  }
+                  if (i==len) data+=tmp;
+              }
               if (reI.match(data)) {
                   var n = reI.matched(1);
                   var k = reI.matched(2);

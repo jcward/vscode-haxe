@@ -74,6 +74,11 @@
                 "type": "integer",
                 "default": 6000,
                 "description": "Port number of the haxe server"
+                },
+                "haxe.haxeDiagnosticDelay": {
+                "type": "integer",
+                "default": 500,
+                "description": "Time (in ms) after we can launch a file validation"
                 }
             }
         }

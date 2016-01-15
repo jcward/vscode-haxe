@@ -35,6 +35,10 @@ var HaxeContext = function(context) {
 	this.diagnostics = Vscode.languages.createDiagnosticCollection("haxe");
 	context.subscriptions.push(this.diagnostics);
 	this.documentsState = new haxe_ds_StringMap();
+	this.maxLastDiagnoseTime = 0;
+	this.checkDiagnostic = false;
+	this.checkTimer = new haxe_Timer(50);
+	this.checkTimer.run = $bind(this,this.check);
 	context.subscriptions.push(this);
 };
 HaxeContext.__name__ = true;
@@ -42,7 +46,32 @@ HaxeContext.languageID = function() {
 	return "haxe";
 };
 HaxeContext.prototype = {
-	init: function() {
+	check: function() {
+		var time = new Date().getTime();
+		if(this.checkDiagnostic) {
+			if(time - this.maxLastDiagnoseTime >= this.configuration.haxeDiagnosticDelay) {
+				this.checkDiagnostic = false;
+				if(this.client.isPatchAvailable) this.diagnose(1); else {
+					var isDirty = false;
+					var tmp = this.documentsState.keys();
+					while(tmp.hasNext()) {
+						var k = tmp.next();
+						var tmp1;
+						var _this = this.documentsState;
+						if(__map_reserved[k] != null) tmp1 = _this.getReserved(k); else tmp1 = _this.h[k];
+						var ds = tmp1;
+						var document = ds.document;
+						if(ds.isDirty) {
+							isDirty = true;
+							if(document != null) document.save();
+						}
+					}
+					if(!isDirty) this.diagnose(1);
+				}
+			}
+		}
+	}
+	,init: function() {
 		this.client = new haxe_HaxeClient(this.configuration.haxeServerHost,this.configuration.haxeServerPort);
 		this.projectDir = Vscode.workspace.rootPath;
 		this.changeDebouncer = new Debouncer(250,$bind(this,this.changePatchs));
@@ -90,6 +119,10 @@ HaxeContext.prototype = {
 	}
 	,dispose: function() {
 		Vscode.window.showInformationMessage("Got dispose!");
+		if(this.checkTimer != null) {
+			this.checkTimer.stop();
+			this.checkTimer = null;
+		}
 		if(this.client.isServerAvailable && this.client.isPatchAvailable) {
 			this.client.clear();
 			var cl = this.client.cmdLine;
@@ -112,6 +145,7 @@ HaxeContext.prototype = {
 		return null;
 	}
 	,applyDiagnostics: function(message) {
+		this.checkDiagnostic = false;
 		var all = new haxe_ds_StringMap();
 		var _g = 0;
 		var _g1 = message.infos;
@@ -160,6 +194,7 @@ HaxeContext.prototype = {
 			this.diagnostics.set(url,diags1);
 			var ds = this.getDocumentState(url.fsPath);
 			ds.lastDiagnostic = new Date().getTime();
+			if(ds.lastDiagnostic > this.maxLastDiagnoseTime) this.maxLastDiagnoseTime = ds.lastDiagnostic;
 		}
 	}
 	,getTime: function() {
@@ -172,7 +207,7 @@ HaxeContext.prototype = {
 		var ds = tmp;
 		if(ds != null) return ds;
 		var t = new Date().getTime();
-		ds = { path : path, isDirty : false, lastModification : t, lastDiagnostic : t};
+		ds = { path : path, isDirty : false, lastModification : t, lastDiagnostic : t, document : null};
 		var _this1 = this.documentsState;
 		if(__map_reserved[path] != null) _this1.setReserved(path,ds); else _this1.h[path] = ds;
 		return ds;
@@ -187,6 +222,7 @@ HaxeContext.prototype = {
 		}
 	}
 	,onOpenDocument: function(document) {
+		this.getDocumentState(document.uri.fsPath).document = document;
 		this.removeAndDiagnoseDocument(document);
 	}
 	,onSaveDocument: function(document) {
@@ -195,32 +231,22 @@ HaxeContext.prototype = {
 		ds.lastModification = new Date().getTime();
 		this.removeAndDiagnoseDocument(document);
 	}
-	,removeAndDiagnoseDocument: function(document) {
+	,diagnose: function(trying) {
 		var _g = this;
+		this.client.cmdLine.save().cwd(this.projectDir).hxml(this.configuration.haxeDefaultBuildFile).noOutput();
+		this.client.sendAll(function(s,message,err) {
+			if(err != null) {
+				if(trying <= 0) Vscode.window.showErrorMessage(err.message); else _g.launchServer().then(function(port) {
+					_g.diagnose(trying - 1);
+				});
+			} else _g.applyDiagnostics(message);
+		},true);
+	}
+	,removeAndDiagnoseDocument: function(document) {
 		this.diagnostics["delete"](document.uri);
 		var path = document.uri.fsPath;
-		var trying = 1;
-		var diagnose1 = (function($this) {
-			var $r;
-			var diagnose = null;
-			diagnose = function() {
-				var cl = _g.client.cmdLine.save().cwd(_g.projectDir).hxml(_g.configuration.haxeDefaultBuildFile).noOutput();
-				if(_g.client.isPatchAvailable) cl.beginPatch(path).remove();
-				_g.client.sendAll(function(s,message,err) {
-					if(err != null) {
-						if(trying <= 0) Vscode.window.showErrorMessage(err.message); else {
-							trying--;
-							_g.launchServer().then(function(port) {
-								diagnose();
-							});
-						}
-					} else _g.applyDiagnostics(message);
-				},true);
-			};
-			$r = diagnose;
-			return $r;
-		}(this));
-		diagnose1();
+		if(this.client.isPatchAvailable) this.client.cmdLine.beginPatch(path).remove();
+		this.diagnose(1);
 	}
 	,changePatchs: function(events) {
 		var _g = this;
@@ -267,16 +293,19 @@ HaxeContext.prototype = {
 		}
 		if(changed) this.client.sendAll(function(s,message,error) {
 			if(error == null) _g.applyDiagnostics(message);
-		},true);
+			_g.checkDiagnostic = true;
+		},true); else this.checkDiagnostic = true;
 	}
 	,changePatch: function(event) {
-		var ds = this.getDocumentState(event.document.uri.fsPath);
+		var document = event.document;
+		var ds = this.getDocumentState(document.uri.fsPath);
 		if(event.contentChanges.length == 0) {
 			ds.isDirty = false;
 			return;
 		}
 		ds.isDirty = true;
 		ds.lastModification = new Date().getTime();
+		ds.document = document;
 		this.changeDebouncer.debounce(event);
 	}
 };
@@ -478,10 +507,19 @@ features_CompletionHandler.prototype = {
 			datas.shift();
 			datas.pop();
 			datas.pop();
-			var _g = 0;
-			while(_g < datas.length) {
-				var data = datas[_g];
-				++_g;
+			var len = datas.length;
+			var i = 0;
+			while(i < len) {
+				var tmp = datas[i++];
+				var data = "";
+				if(HxOverrides.substr(tmp,0,2) == "<i") {
+					while(i < len) {
+						data += tmp;
+						if(HxOverrides.substr(tmp,tmp.length - 2,2) == "i>") break;
+						tmp = datas[i++];
+					}
+					if(i == len) data += tmp;
+				}
 				if(features_CompletionHandler.reI.match(data)) {
 					var n = features_CompletionHandler.reI.matched(1);
 					var k = features_CompletionHandler.reI.matched(2);

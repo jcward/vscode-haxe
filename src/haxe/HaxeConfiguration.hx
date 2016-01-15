@@ -8,6 +8,7 @@ typedef HaxeConfigurationObject = {
     haxeDefaultBuildFile:String,
     haxeServerHost:String,
     haxeServerPort:Int,
+    haxeDiagnosticDelay:Int,
     ?haxeExec:String, // filled at runtime
     ?haxelibExec:String // filled at runtime
 };
