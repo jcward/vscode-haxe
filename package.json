@@ -10,7 +10,8 @@
 		"Languages"
 	],
 	"activationEvents": [
-		"onLanguage:haxe"
+		"onLanguage:haxe",
+        "onLanguage:hxml"
 	],
 	"main": "./haxe.js",
 	"contributes": {
