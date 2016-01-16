@@ -24,7 +24,7 @@ class CompletionHandler implements CompletionItemProvider
       
       var context = hxContext.context;
             
-      var disposable = Vscode.languages.registerCompletionItemProvider(HaxeContext.languageID(), this, '.', ':');
+      var disposable = Vscode.languages.registerCompletionItemProvider(HaxeContext.languageID(), this, '.', ':', '{');
       context.subscriptions.push(disposable);
   }
   
@@ -116,12 +116,15 @@ class CompletionHandler implements CompletionItemProvider
   
     var lastChar = text.charAt(char_pos-1);
     var isDot =  lastChar == '.';
+       
+    makeCall = isDot || (lastChar == '{');
     
-    makeCall = isDot;
+    var positionMode = !makeCall;
 
     if (isDot) {
         if (delta > 150) makeCall = true;
     }
+    
     if (!makeCall) {
         var items = [];
         // metadata completion
@@ -136,7 +139,7 @@ class CompletionHandler implements CompletionItemProvider
         return new Thenable<Array<CompletionItem>>(function(resolve) {resolve(items);});
     }
  
-    if (!isDot) displayMode = haxe.HaxeCmdLine.DisplayMode.Position;
+    if (positionMode) displayMode = haxe.HaxeCmdLine.DisplayMode.Position;
 
     var byte_pos = Tool.byte_pos(text, char_pos);
     
