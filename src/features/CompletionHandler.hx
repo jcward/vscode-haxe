@@ -98,8 +98,11 @@ class CompletionHandler implements CompletionItemProvider
     //else if (subline.indexOf('(')>=0) {
     //  dot_offset = subline.lastIndexOf('(') - position.character + 1;
     //}
-    
+
+#if DO_FULL_PATCH
+#else
     var changeDebouncer = hxContext.changeDebouncer;
+#end
     var client = hxContext.client;
 
     var text = document.getText();
@@ -183,7 +186,8 @@ class CompletionHandler implements CompletionItemProvider
       //       try temporary -cp?
       //       See: https://github.com/HaxeFoundation/haxe/issues/4651
       
-      var isDirty = document.isDirty;
+      var ds = hxContext.getDocumentState(path);
+      var isDirty = document.isDirty || ds.isDirty;
 
       function doRequest() {
         var isPatchAvailable = client.isPatchAvailable;
@@ -191,7 +195,7 @@ class CompletionHandler implements CompletionItemProvider
         if (isPatchAvailable) {
 #if DO_FULL_PATCH
             if (isDirty) {
-                client.beginPatch(path).delete(0,-1).insert(0, document.getText());
+                hxContext.patchFullDocument(ds);
                 make_request();
             } else {
                 make_request();

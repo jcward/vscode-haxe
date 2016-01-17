@@ -220,22 +220,14 @@ class HaxeClient {
     static var reCheckMeta = ~/^\s*(@:)([^\s]+)\s+: (.+)/s;
 #end
     static var reCheckOptionName = ~/([^\s]+)(\s+(.+))?/;
-    public function setStatus(message:Message, error:Null<Error>) {
-        isServerAvailable = (error == null);
-        isPatchAvailable = false;
-        isHaxeServer = false;
-        if (isServerAvailable) {
-            isPatchAvailable = message.severity!=MessageSeverity.Error;
-            if (message.stderr.length>0)
-                isHaxeServer = reVersion.match(message.stderr[0]);
-        }
-        return this;
-    }
+
     inline function unformatDoc(s:String) return s;
+
     public function infos(onData:Null<HaxeClient->Void>) {
         resetInfos();
 
         var step = 0;
+
         function next() {
             cmdLine.save();
             switch(step) {
@@ -306,20 +298,5 @@ class HaxeClient {
             );
         }
         next();
-    }
-    public function patchAvailable(onData:Null<HaxeClient->Void>) {
-        cmdLine.save()
-        .version()
-        .beginPatch('~.hx')
-        .remove()
-        ;
-
-        sendAll(
-            function (s:Socket, message:Message, error:Null<Error>) {
-                setStatus(message, error);
-                if (onData!=null) onData(this);
-            },
-            true
-        );
     }
 }

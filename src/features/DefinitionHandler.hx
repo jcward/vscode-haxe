@@ -33,7 +33,10 @@ class DefinitionHandler implements DefinitionProvider
                                     position:Position,
                                     cancelToken:CancellationToken):Thenable<Definition>
   {
+#if DO_FULL_PATCH
+#else
       var changeDebouncer = hxContext.changeDebouncer;
+#end
       var client = hxContext.client;
       
       var path:String = document.uri.fsPath;
@@ -104,7 +107,8 @@ class DefinitionHandler implements DefinitionProvider
             client.sendAll(parse, true);
           }
 
-          var isDirty = document.isDirty;
+          var ds = hxContext.getDocumentState(path);
+          var isDirty = document.isDirty || ds.isDirty;
 
       function doRequest() {
         var isPatchAvailable = client.isPatchAvailable;
@@ -113,7 +117,7 @@ class DefinitionHandler implements DefinitionProvider
         if (isPatchAvailable) {
 #if DO_FULL_PATCH
             if (isDirty) {
-                client.cmdLine.beginPatch(path).delete(0,-1).insert(0, document.getText());
+                hxContext.patchFullDocument(ds);
                 make_request();
             } else {
                 make_request();

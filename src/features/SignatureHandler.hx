@@ -81,8 +81,10 @@ class SignatureHandler implements SignatureHelpProvider
                                     cancelToken:CancellationToken):Thenable<SignatureHelp>
   {
       var client = hxContext.client;
+#if DO_FULL_PATCH
+#else
       var changeDebouncer = hxContext.changeDebouncer;
-      
+#end      
       var path:String = document.uri.fsPath;
       
       var text = document.getText();
@@ -153,7 +155,8 @@ class SignatureHandler implements SignatureHelpProvider
             );
           }
           
-          var isDirty = document.isDirty;
+          var ds = hxContext.getDocumentState(path);
+          var isDirty = document.isDirty || ds.isDirty;
 
       function doRequest() {
         var isServerAvailable = client.isServerAvailable;
@@ -162,7 +165,7 @@ class SignatureHandler implements SignatureHelpProvider
         if (isPatchAvailable) {
 #if DO_FULL_PATCH
             if (isDirty) {
-                client.cmdLine.beginPatch(path).delete(0,-1).insert(0, document.getText());
+                hxContext.patchFullDocument(ds);
                 make_request();
             } else {
                 make_request();

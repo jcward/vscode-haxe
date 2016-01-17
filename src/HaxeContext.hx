@@ -79,8 +79,23 @@ class HaxeContext  {
             var dlt = time - maxLastDiagnoseTime;
             if (dlt >= configuration.haxeDiagnosticDelay) {
                 checkDiagnostic = false;
-                if (client.isPatchAvailable) diagnose(1);
-                else {
+                if (client.isPatchAvailable) {
+#if DO_FULL_PATCH
+                    var isDirty = false;
+                    for (k in documentsState.keys()) {
+                        var ds = documentsState.get(k);
+                        var document = ds.document;
+                        if (ds.isDirty) {
+                            isDirty = true;
+                            diagnostics.delete(untyped document.uri);
+                            patchFullDocument(ds);
+                        }
+                    }
+                    if (isDirty) diagnose(1);
+#else
+                    diagnose(1);
+#end
+                } else {
                     var isDirty = false;
                     for (k in documentsState.keys()) {
                         var ds = documentsState.get(k);
@@ -104,10 +119,11 @@ class HaxeContext  {
         
         projectDir = Vscode.workspace.rootPath;
 
+        context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument(changePatch));
+
 #if DO_FULL_PATCH
 #else
         changeDebouncer = new Debouncer<TextDocumentChangeEvent>(300, changePatchs);
-        context.subscriptions.push(Vscode.workspace.onDidChangeTextDocument(changePatch));
 #end
         // remove the patch if the document is opened, saved, or closed
         context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument(onOpenDocument));    
@@ -246,6 +262,15 @@ class HaxeContext  {
         ds.document = document;
         removeAndDiagnoseDocument(document);
     }
+    public function patchFullDocument(ds:DocumentState, ?send = false) {
+        var document = ds.document;
+        if (document==null) return;
+        var text = document.getText();
+        client.cmdLine.beginPatch(ds.path).delete(0,-1).insert(0, text.byteLength(), text);
+        if (send) client.sendAll(null);
+        ds.isDirty = false;
+        ds.lastModification = getTime();
+    }
     function onSaveDocument(document) {
         var path:String = document.uri.fsPath;
         var ds = getDocumentState(path);
@@ -283,8 +308,19 @@ class HaxeContext  {
             client.cmdLine.beginPatch(path).remove();
         }
         diagnose(1);
-    }   
+    }  
 #if DO_FULL_PATCH
+    function changePatch(event:TextDocumentChangeEvent) {
+        var document = event.document;
+        var path:String = document.uri.fsPath;
+        var ds = getDocumentState(path);
+        if (event.contentChanges.length==0) {
+            return;
+        }
+        ds.isDirty = checkDiagnostic = true;
+        ds.lastModification = getTime();
+        ds.document = document;
+    }
 #else
     function changePatchs(events:Array<TextDocumentChangeEvent>) {        
         var cl = client.cmdLine.save()
