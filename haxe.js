@@ -1206,7 +1206,7 @@ haxe_HaxeConfiguration.__name__ = true;
 haxe_HaxeConfiguration.addTrailingSep = function(path,platform) {
 	if(path == "") return path;
 	path = path.split(platform.reversePathSeparator).join(platform.pathSeparator);
-	if(path.charAt(path.length - 1) != platform.pathSeparator) path += platform.reversePathSeparator;
+	if(path.charAt(path.length - 1) != platform.pathSeparator) path += platform.pathSeparator;
 	return path;
 };
 haxe_HaxeConfiguration.update = function(conf,platform) {
