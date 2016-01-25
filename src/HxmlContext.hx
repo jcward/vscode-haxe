@@ -47,6 +47,7 @@ class HxmlContext {
         context.subscriptions.push(cast this);
     }
     function onBuildChange(e:Event<Uri>) {
+        haxelibCache = new Map();
         makeInternalBuild();
     }
     public function dispose() {
@@ -136,7 +137,9 @@ class HxmlContext {
         }        
         
         var lines:Array<String> = (cast out.stdout).split("\n");
-        return _parseLines(lines, datas, true);        
+        lines = _parseLines(lines, datas, true);
+        haxelibCache.set(libName, lines);
+        return lines;        
     }
 
     static var reComment = ~/\s*#(.+)/;

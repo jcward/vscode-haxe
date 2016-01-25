@@ -127,8 +127,19 @@ class HaxeContext  {
         if (tmp != null) return tmp;
         var paths = nfile.split(Path.sep);
         var fileName = paths.pop();
-        var path= paths.join(Path.sep);
-        var paths = Fs.readdirSync(path);
+        var path = paths.join(Path.sep);
+        var paths = [];
+        try {
+            paths = Fs.readdirSync(path);
+        } catch (e:Dynamic) {
+            if (configuration.haxeUseTmpAsWorkingDirectory) {
+                paths = path.split(workingDir);
+                paths.shift();
+                paths = [realWorkingDir, ".."].concat(paths);
+                path = paths.join(Path.sep);
+                paths = Fs.readdirSync(path);
+            }
+        }
         for (p in paths) {
             if (p.toLowerCase()==fileName) {
                 file = Path.join(path, p);

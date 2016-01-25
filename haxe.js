@@ -171,7 +171,18 @@ HaxeContext.prototype = {
 		var paths = nfile.split(js_node_Path.sep);
 		var fileName = paths.pop();
 		var path = paths.join(js_node_Path.sep);
-		var paths1 = js_node_Fs.readdirSync(path);
+		var paths1 = [];
+		try {
+			paths1 = js_node_Fs.readdirSync(path);
+		} catch( e ) {
+			if(this.configuration.haxeUseTmpAsWorkingDirectory) {
+				paths1 = path.split(this.get_workingDir());
+				paths1.shift();
+				paths1 = [this.projectDir,".."].concat(paths1);
+				path = paths1.join(js_node_Path.sep);
+				paths1 = js_node_Fs.readdirSync(path);
+			}
+		}
 		var _g = 0;
 		while(_g < paths1.length) {
 			var p = paths1[_g];
@@ -724,6 +735,7 @@ HxmlContext.prototype = {
 		return this.hxContext.client;
 	}
 	,onBuildChange: function(e) {
+		this.haxelibCache = new haxe_ds_StringMap();
 		this.makeInternalBuild();
 	}
 	,dispose: function() {
@@ -800,7 +812,11 @@ HxmlContext.prototype = {
 			Vscode.window.showErrorMessage(out.stdout);
 			return null;
 		}
-		return this._parseLines(out.stdout.split("\n"),datas,true);
+		var lines = out.stdout.split("\n");
+		lines = this._parseLines(lines,datas,true);
+		var _this2 = this.haxelibCache;
+		if(__map_reserved[libName] != null) _this2.setReserved(libName,lines); else _this2.h[libName] = lines;
+		return lines;
 	}
 	,onHover: function(document,position,cancelToken) {
 		var sHover = "";
@@ -1140,21 +1156,26 @@ features_CompletionHandler.prototype = {
 			var isDot = lastChar == ".";
 			var isTriggerChar = isDot || lastChar == "{";
 			var isProbablyMeta = lastChar == ":";
+			var displayClasses = false;
 			if(!isProbablyMeta && !isTriggerChar) {
 				var j = char_pos - 2;
 				while(j >= 0) {
 					if(!features_CompletionHandler.reWord.match(text.charAt(j))) break;
 					--j;
 				}
-				HxOverrides.substr(text,j + 1,char_pos - 1 - j);
-				while(j >= 0) {
-					if(!features_CompletionHandler.reWS.match(text.charAt(j))) break;
-					--j;
+				if(HxOverrides.substr(text,j + 1,char_pos - 1 - j) == "import" && features_CompletionHandler.reWS.match(lastChar)) {
+					isTriggerChar = true;
+					displayClasses = true;
+				} else {
+					while(j >= 0) {
+						if(!features_CompletionHandler.reWS.match(text.charAt(j))) break;
+						--j;
+					}
+					lastChar = text.charAt(j);
+					isDot = lastChar == ".";
+					if(!isDot) isTriggerChar = lastChar == "{"; else isTriggerChar = true;
+					if(isTriggerChar) char_pos = j + 1;
 				}
-				lastChar = text.charAt(j);
-				isDot = lastChar == ".";
-				if(!isDot) isTriggerChar = lastChar == "{"; else isTriggerChar = true;
-				if(isTriggerChar) char_pos = j + 1;
 			}
 			makeCall = isTriggerChar;
 			if(!makeCall) {
@@ -1179,7 +1200,8 @@ features_CompletionHandler.prototype = {
 					reject([]);
 					return;
 				}
-				client.cmdLine.save().cwd(_g.hxContext.get_workingDir()).define("display-details").hxml(_g.hxContext.get_buildFile()).noOutput().display(path,byte_pos,displayMode);
+				var cl = client.cmdLine.save().cwd(_g.hxContext.get_workingDir()).define("display-details").hxml(_g.hxContext.get_buildFile()).noOutput();
+				if(displayClasses) cl.classes(); else cl.display(path,byte_pos,displayMode);
 				client.setContext({ fileName : path, line : position.line + 1, column : char_pos}).setCancelToken(cancelToken);
 				_g.hxContext.send("completion@2",true,1,10).then(function(m) {
 					if(cancelToken.isCancellationRequested) reject([]); else {
