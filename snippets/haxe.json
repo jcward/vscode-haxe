@@ -1,0 +1,44 @@
+{
+    "function" : {
+        "prefix": "fn",
+        "body": [
+            "function $1($2) {\n\t$3\n}"
+        ],
+        "description": "Insert a new function"
+    },
+    "inline function" : {
+        "prefix": "ifn",
+        "body": [
+            "inline function $1($2) {\n\t$3\n}"
+        ],
+        "description": "Insert a new inline function"
+    },
+    "static inline function" : {
+        "prefix": "sifn",
+        "body": [
+            "static inline function $1($2) {\n\t$3\n}"
+        ],
+        "description": "Insert a new static inline function"
+    },
+    "static function" : {
+        "prefix": "sfn",
+        "body": [
+            "static function $1($2) {\n\t$3\n}"
+        ],
+        "description": "Insert a new static function"
+    },
+    "class": {
+        "prefix": "cl",
+        "body": [
+            "class $1 {\n\t$2\n}"
+        ],
+        "description": "Insert a new class"
+    },
+    "main function" : {
+        "prefix": "main",
+        "body": [
+            "public static function main($1) {\n\t$2\n}"
+        ],
+        "description": "Insert main function"
+    }
+}

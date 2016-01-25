@@ -71,4 +71,9 @@ class Socket {
     public function readAll() {
         return s.read();
     }
+    public function close() {
+#if js
+        s.destroy();
+#end
+    }
 }

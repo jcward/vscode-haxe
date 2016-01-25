@@ -3,6 +3,7 @@ package features;
 import Vscode;
 
 import HaxeContext;
+import Tool.getTime;
 
 import Tool;
 using Tool;
@@ -13,6 +14,9 @@ import haxe.HaxeClient;
 import haxe.HaxeClient.MessageSeverity;
 import haxe.HaxeCmdLine.IdeFlag;
 
+using HaxeContext;
+
+import js.Promise as JSPromise;
 
 class CompletionHandler implements CompletionItemProvider
 {
@@ -24,22 +28,17 @@ class CompletionHandler implements CompletionItemProvider
       
       var context = hxContext.context;
             
-      var disposable = Vscode.languages.registerCompletionItemProvider(HaxeContext.languageID(), this, '.', ':', '{');
+      var disposable = Vscode.languages.registerCompletionItemProvider(HaxeContext.languageID(), this, '.', ':', '{', ' ');
       context.subscriptions.push(disposable);
   }
-  
+
   static var reI=~/<i n="([^"]+)" k="([^"]+)"( ip="([0-1])")?( f="(\d+)")?><t>([^<]*)<\/t><d>([^<]*)<\/d><\/i>/;
   static var reGT = ~/&gt;/g;
   static var reLT = ~/&lt;/g;
   static var reMethod = ~/Void|Unknown/;
-  
+
   public function parse_items(msg:Message):Array<CompletionItem> {
       var rtn = new Array<CompletionItem>();
-      
-      if (msg.severity==MessageSeverity.Error) {
-          hxContext.applyDiagnostics(msg);
-          return rtn;
-      }
       var datas = msg.stderr;
       if ((datas.length > 2) && (datas[0]=="<list>")) {
           datas.shift();
@@ -85,100 +84,117 @@ class CompletionHandler implements CompletionItemProvider
                   rtn.push(ci);
               }
           }     
+      } else {
+          rtn.push(null);
       }
       return rtn;
   }
+  
+  static var reWord = ~/[a-zA-Z_$]/;
+  static var reWS = ~/[\r\n\t\s]/;
 
   public function provideCompletionItems(document:TextDocument,
                                          position:Position,
                                          cancelToken:CancellationToken):Thenable<Array<CompletionItem>>
   {
-    // So far we don't parse this output from the completion server:
-    // <type>key : String -&gt; Bool</type>
-    //else if (subline.indexOf('(')>=0) {
-    //  dot_offset = subline.lastIndexOf('(') - position.character + 1;
-    //}
-
-#if DO_FULL_PATCH
-#else
-    var changeDebouncer = hxContext.changeDebouncer;
-#end
-    var client = hxContext.client;
-
-    var text = document.getText();
-    var char_pos = document.offsetAt(position);
-    var path:String = document.uri.fsPath;
-
-    var documentState = hxContext.getDocumentState(path);
-    var lm = documentState.lastModification;
-
-    var delta = hxContext.getTime() - lm;
-    
-    var makeCall = false;
-    var displayMode = haxe.HaxeCmdLine.DisplayMode.Default;
-  
-    var lastChar = text.charAt(char_pos-1);
-    var isDot =  lastChar == '.';
-       
-    makeCall = isDot || (lastChar == '{');
-    
-    var positionMode = !makeCall;
-
-    if (isDot) {
-        if (delta > 150) makeCall = true;
-    }
-    
-    if (!makeCall) {
-        var items = [];
-        // metadata completion
-        if ((lastChar == ':') && (text.charAt(char_pos-2)=="@")) {
-            for (data in hxContext.client.metas) {
-                var ci = new Vscode.CompletionItem(data.name);
-                ci.documentation = data.doc;
-                items.push(ci);
-            }
-            hxContext.cancelDiagnostic();
+    return new Thenable<Array<CompletionItem>>(function(accept, reject) {
+        if (cancelToken.isCancellationRequested) {
+            reject([]);
+            return;
         }
-        return new Thenable<Array<CompletionItem>>(function(resolve) {resolve(items);});
-    }
- 
-    if (positionMode) displayMode = haxe.HaxeCmdLine.DisplayMode.Position;
 
-    var byte_pos = Tool.byte_pos(text, char_pos);
+        var changeDebouncer = hxContext.changeDebouncer;
+
+        var client = hxContext.client;
+        var text = document.getText();
+        var char_pos = document.offsetAt(position);
+
+        var documentState = hxContext.getDocumentState(document.uri.fsPath);
+        var path = documentState.path();
+         
+        var makeCall = false;
+        var displayMode = haxe.HaxeCmdLine.DisplayMode.Default;
     
-    hxContext.cancelDiagnostic();
+        var lastChar = text.charAt(char_pos-1);
+        var isDot =  lastChar == '.';
+        
+        var isTriggerChar = (isDot || (lastChar == '{'));
+        var isProbablyMeta = (lastChar == ":");
+        
+        var word = "";
 
-    return new Thenable<Array<CompletionItem>>(function(resolve) {
-      var trying = 1;
+        if (!isProbablyMeta && !isTriggerChar) {
+            var j = char_pos - 2;
+            while (j >= 0) {
+                if (!reWord.match(text.charAt(j))) break;
+                j--;
+            }
+            var word = text.substr(j+1, char_pos-1-j);
+            while (j>=0) {
+                if (!reWS.match(text.charAt(j))) break;
+                j--;
+            }
+            lastChar = text.charAt(j);
+            isDot =  lastChar == '.';
+            isTriggerChar = (isDot || (lastChar == '{'));
+            if (isTriggerChar) char_pos = j + 1;
+        }
 
-      function make_request() {
-          hxContext.cancelDiagnostic();
-
-          var cl = client.cmdLine.save()
-          .cwd(hxContext.projectDir)
-          .define("display-details")
-          .hxml(hxContext.configuration.haxeDefaultBuildFile)
-          .noOutput()
-          .display(path, byte_pos, displayMode);
-          
-          client.sendAll(
-              function (s, message, err) {
-                if (err != null) {
-                    if (trying <= 0) {
-                        err.message.displayAsError();
-                        resolve([]);
-                    } else {
-                        trying--;
-                        hxContext.launchServer().then(function(port) {
-                           make_request(); 
-                        });
-                    }                
-                } else {
-                    resolve(parse_items(message));
+        makeCall = isTriggerChar;
+        
+        if (!makeCall) {
+            var items = [];
+            // metadata completion
+            if (isProbablyMeta && (text.charAt(char_pos-2)=="@")) {
+                for (data in hxContext.client.metas) {
+                    var ci = new Vscode.CompletionItem(data.name);
+                    ci.documentation = data.doc;
+                    items.push(ci);
                 }
-             },
-             true,
-             "completion"
+            }
+            return accept(items);
+        }
+    
+        var byte_pos = Tool.byte_pos(text, char_pos);
+        
+        function make_request() {
+            if (cancelToken.isCancellationRequested) {
+                reject([]);
+                return;
+            }
+            
+            var cl = client.cmdLine.save()
+            .cwd(hxContext.workingDir)
+            .define("display-details")
+            .hxml(hxContext.buildFile)
+            .noOutput()
+            .display(path, byte_pos, displayMode);
+            
+            client
+            .setContext({fileName:path, line:(position.line+1), column:char_pos})
+            .setCancelToken(cancelToken)
+            ;
+            
+            hxContext.send("completion@2", true, 1, 10).then(
+              function(m) {
+                  if (cancelToken.isCancellationRequested) reject([]);
+                  else {
+                      var ret = parse_items(m); 
+                      if (ret.length==1 && ret[0]==null) {
+                          ret = [];
+                          hxContext.diagnoseIfAllowed();
+                      }
+                      accept(ret);
+                  }
+              },
+              function(m:Message) {
+                  if (!cancelToken.isCancellationRequested) {
+                      if (m.severity==MessageSeverity.Error) {
+                          hxContext.applyDiagnostics(m);
+                      }
+                  }
+                  reject([]);
+              }
           );
       }
 
@@ -187,66 +203,63 @@ class CompletionHandler implements CompletionItemProvider
       //       See: https://github.com/HaxeFoundation/haxe/issues/4651
       
       var ds = hxContext.getDocumentState(path);
-      var isDirty = document.isDirty || ds.isDirty;
+      var isDirty = client.isPatchAvailable ? ds.isDirty() : ds.isDirty() || document.isDirty;
 
       function doRequest() {
-        var isPatchAvailable = client.isPatchAvailable;
-        var isServerAvailable = client.isServerAvailable;
-        if (isPatchAvailable) {
+          if (cancelToken.isCancellationRequested) {
+              reject([]);
+              return;
+          }
+          var isPatchAvailable = client.isPatchAvailable;
+          var isServerAvailable = client.isServerAvailable;
+          if (isPatchAvailable) {
 #if DO_FULL_PATCH
             if (isDirty) {
-                hxContext.patchFullDocument(ds);
-                make_request();
+                hxContext.patchFullDocument(ds).then(
+                    function(ds) {make_request();},
+                    function(ds) {reject([]);}
+                );
             } else {
                 make_request();
             }
 #else
             changeDebouncer.whenDone(function(){make_request();});
 #end
-        } else {
-            if (isDirty && isServerAvailable) {
-                document.save().then(function (saved) {
-                    if (saved) make_request(); 
-                    else resolve([]);
-                });
-            } else {
-                make_request();
-            }
-        }          
-      }
-      
-      if (!client.isServerAvailable) {
-          var cl = client.cmdLine.save().version();
-          var patcher = cl.beginPatch(path);
-
-          if (isDirty) {
-#if DO_FULL_PATCH
-#else
-              var text = document.getText();
-              patcher.delete(0, -1).insert(0, text.byteLength(), text);
-#end
           } else {
-              patcher.remove();
-          }
-                    
-          client.sendAll(
-            function (s:Socket, message, err) {
-                var isPatchAvailable = false;
-                if (client.isServerAvailable) {
-                    if (message.severity==MessageSeverity.Error) {
-                        if (message.stderr.length > 1) isPatchAvailable = HaxeClient.isOptionExists(HaxePatcherCmd.name(), message.stderr[1]);
-                    }
-                    else isPatchAvailable = true;
-                }
-                client.isPatchAvailable = isPatchAvailable;
-                doRequest();
-            },
-            true             
+              changeDebouncer.whenDone(function() {
+                  if (cancelToken.isCancellationRequested) {
+                      reject([]);
+                      return;
+                  }
+                  var ps = [];
+                  for (ds in hxContext.getDirtyDocuments()) {
+                      ds.diagnoseOnSave = false;
+                      ps.push(hxContext.saveDocument(ds));
+                  }
+                  if (ps.length == 0) make_request();
+                  else {
+                      JSPromise.all(ps).then(
+                          function(all) {
+                              if (cancelToken.isCancellationRequested) {
+                                  reject([]);
+                                  return;
+                              }
+                              make_request();
+                          },
+                          function(all){reject([]);}
+                      );
+                  }
+              });
+          }          
+      }
+      if (!client.isServerAvailable) {
+          hxContext.launchServer().then(
+              function(port) {doRequest();},
+              function(port) {reject([]);}
           );
       } else doRequest();
     });
   }
-	
   public function resolveCompletionItem(item:CompletionItem,
                                         cancelToken:CancellationToken):CompletionItem {
     return item;

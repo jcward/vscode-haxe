@@ -73,6 +73,12 @@ class HaxeCmdLine {
     public function noOutput():HaxeCmdLine {
         unique.set("--no-output", "");
         return this;       
+    }
+    public function keywords(){
+        unique.set("--display", "keywords");
+    }
+    public function classes(){
+        unique.set("--display", "classes");
     }    
     public function display(fileName:String, pos:Int, mode:DisplayMode):HaxeCmdLine {
         var dm = switch (mode) {
@@ -132,13 +138,21 @@ class HaxeCmdLine {
         workingDir = i.workingDir;
         return this;
     }
-    public function get_cmds():String {
+    public function clone() {
+        var cl = new HaxeCmdLine();
+        cl.cmds = cmds.concat([]);
+        var clu = cl.unique;
+        for (key in unique.keys()) clu.set(key, unique.get(key));
+        cl.workingDir = workingDir;
+        return cl;
+    }
+    public function toString():String {
         var cmds = cmds.concat([]);
         for (key in unique.keys()) {
             cmds.push(key+" " +unique.get(key));
         }
         for (key in patchers.keys()) {
-            cmds.push(patchers.get(key).get_cmd());            
+            cmds.push(patchers.get(key).toString());            
         }
         return cmds.join("\n");
     }

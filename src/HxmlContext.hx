@@ -3,28 +3,149 @@ import Vscode;
 import HaxeContext;
 import haxe.HaxeClient;
 
+import js.node.Path;
+import js.node.Fs;
+import js.node.Fs.FsOpenFlag;
+import js.node.Fs.FsMode;
+import js.node.ChildProcess;
+import js.Error;
+
+using Tool;
+using StringTools;
+
 class HxmlContext {
     public inline static function languageID() return "hxml";
+    
+    public static inline function isHxmlDocument(document:TextDocument) return (document.languageId == languageID());
 
     public var hxContext(default, null):HaxeContext;
-
+    
+    var haxelibCache:Map<String, Array<String>>;
+    
     public var context(get, null):ExtensionContext;
     inline function get_context() return hxContext.context; 
 
     public var client(get, null):HaxeClient;
     inline function get_client() return hxContext.client;     
     
-    public function new(hxContext) {
+    var internalBuildLines:Array<String>;
+    
+    var buildWatcher:Vscode.FileSystemWatcher;
+    
+    public function new(hxContext:HaxeContext) {
         this.hxContext = hxContext;
         var disposable = Vscode.languages.registerHoverProvider(languageID(), {provideHover:onHover});
         context.subscriptions.push(disposable);
         
-        new features.hxml.CompletionHandler(this);
+        haxelibCache = new Map();
+        
+        buildWatcher = Vscode.workspace.createFileSystemWatcher(hxContext.realBuildFileWithPath, true, false, true);
+        buildWatcher.onDidChange(onBuildChange);
+        makeInternalBuild();
+              
+        new features.hxml.CompletionHandler(this);   
+        context.subscriptions.push(cast this);
+    }
+    function onBuildChange(e:Event<Uri>) {
+        makeInternalBuild();
+    }
+    public function dispose() {
+        buildWatcher.dispose();
+        Fs.unlinkSync(hxContext.internalBuildFileWithPath);
+    }
+    function makeInternalBuild() {
+        hxContext.clearClassPaths();
+        var lines = read(hxContext.realBuildFileWithPath);
+        var newLines = parseLines(lines);
+        if (newLines != null) lines = newLines;
+        hxContext.useInternalBuildFile = true;
+        Fs.writeFileSync(hxContext.internalBuildFileWithPath, newLines.join("\n"), "utf8");
+    }
+    function read(fileName:String) {
+        try {
+            var txt = Fs.readFileSync(fileName, "utf8");
+            var lines = txt.split("\n");
+            return lines;
+        } catch(e:Dynamic) {
+            'Can\'t read file $fileName'.displayAsError();
+            return [];
+        }
+    }
+    
+    function parseLines(lines:Array<String>) {
+        var newLines = ['#automatically generated do not edit', '#@date ${Date.now()}'];
+        newLines = _parseLines(lines, newLines);
+        if (hxContext.useTmpDir) newLines.push('-cp ${hxContext.tmpProjectDir}');
+        return newLines;
+    }
+    function _parseLines(lines:Array<String>, ?acc:Null<Array<String>>=null, ?isLib=false) {
+        if (acc == null) acc = [];
+
+        for (line in lines) {
+            line = line.trim();
+            if (line == "") {
+                acc.push("\n");
+                continue;
+            }
+            if (hxContext.configuration.haxeCacheHaxelib && reLibOption.match(line)) {
+                acc.push('#@begin-cache $line');
+                var ret = cacheLibData(reLibOption.matched(1), acc);
+                if (ret == null) return null;
+                if (ret[ret.length-1]=="\n") ret.pop();
+                acc = ret;
+                acc.push('#@end-cache');
+            } else {
+                if (reCpOption.match(line)) {
+                    var cp = hxContext.addClassPath(reCpOption.matched(1));
+                    acc.push('-cp $cp');
+                } else
+                    if (!isLib) acc.push(line);
+                    else
+                        switch(line.charAt(0)) {
+                            case "-" | "#":
+                                acc.push(line);
+                            default:
+                                var cp = hxContext.addClassPath(line);
+                                acc.push('-cp $cp');
+                        }
+            }
+        }
+        
+        return acc;
+    }
+    function cacheLibData(libName, datas:Array<String>) {
+        var d = haxelibCache.get(libName);
+        if (d!=null) return datas.concat(d);
+        
+        haxelibCache.set(libName, []);
+        
+        var exec = hxContext.configuration.haxelibExec;
+        var out = ChildProcess.spawnSync(
+            exec,
+            ["path", libName], 
+            {encoding:"utf8"});
+            
+        if (out.pid==0) {
+            'Cant find $exec'.displayAsError();
+            return null;
+        }
+        
+        if (out.status == 1) {
+            out.stdout.displayAsError();
+            return null;
+        }        
+        
+        var lines:Array<String> = (cast out.stdout).split("\n");
+        return _parseLines(lines, datas, true);        
     }
 
+    static var reComment = ~/\s*#(.+)/;
     static var reCheckOption = ~/^\s*(-(-)?)([^\s]+)(\s+(.*))?/;
     static var reDefineParam = ~/([^=]+)(=(.+))?/;
     static var reMain = ~/\s*(.+)/;
+    static var reLibOption = ~/^\s*-lib\s+([^\s]+)(.*)/;
+    static var reCpOption = ~/^\s*-cp\s+([^#]+)(.*)/;
+    
     function onHover(document:TextDocument, position:Position, cancelToken:CancellationToken):Hover {
         var sHover = "";
         var client = hxContext.client;

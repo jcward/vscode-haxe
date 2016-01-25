@@ -4,6 +4,7 @@ package haxe;
 abstract PatcherEditOP(String) {
     var Insert="+";
     var Delete="-";
+    var Replace="r";
 }
 
 @:enum
@@ -39,6 +40,7 @@ class HaxePatcherCmd {
         switch(pop.op) {
             case PatcherEditOP.Insert: '${pop.unit}${PatcherEditOP.Insert}${pop.pos}:${pop.content}\x01';
             case PatcherEditOP.Delete: '${pop.unit}${PatcherEditOP.Delete}${pop.pos}:${pop.len}\x01';
+            case PatcherEditOP.Replace: '${pop.unit}${PatcherEditOP.Delete}0:-1\x01@${pop.unit}${PatcherEditOP.Insert}0:${pop.content}\x01';
         }
     } 
     public function delete(pos:Int, len:Int, ?unit:PatcherUnit=null) {
@@ -88,7 +90,23 @@ class HaxePatcherCmd {
         }
         return this;        
     }
-    public function get_cmd() {
+     public function replace(text:String) {
+        var unit = PatcherUnit.Byte;
+        var op = PatcherEditOP.Replace;
+        if (pendingOP == null) pendingOP = {unit:unit, op:op, pos:0, len:-1, content:text};
+        else {
+            // we try to group successive insert
+            if (pendingOP.op==op) {
+                pendingOP.content = text;
+            }
+            else {
+                actions.push(opToString(pendingOP));
+                pendingOP = {unit:unit, op:op, pos:0, len:-1, content:text};
+            }
+        }
+        return this;        
+    }
+    public function toString() {
         if (pendingOP != null) {
             actions.push(opToString(pendingOP));
             pendingOP = null;

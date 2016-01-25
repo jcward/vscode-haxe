@@ -6,6 +6,7 @@ class Platform {
     public var pathSeparator:String;
     public var reversePathSeparator:String;
     public var executableExtension:String;
+    public var isWin:Bool;
 
     function new() {    
     }
@@ -16,10 +17,12 @@ class Platform {
             instance.pathSeparator = "\\";
             instance.reversePathSeparator = "/";
             instance.executableExtension = ".exe";
+            instance.isWin = true;
         } else {
             instance.pathSeparator = "/";
             instance.reversePathSeparator = "\\";
-            instance.executableExtension = "";            
+            instance.executableExtension = "";
+            instance.isWin = false;            
         }
         return instance;
     }

@@ -3,6 +3,7 @@ package features;
 import Vscode;
 
 import HaxeContext;
+using HaxeContext;
 
 import Tool;
 using Tool;
@@ -14,6 +15,8 @@ import haxe.HaxeClient.MessageSeverity;
 import haxe.HaxeClient.Info as HxInfo;
 
 using features.SignatureHandler.FunctionDecoder;
+
+import js.Promise as JSPromise;
 
 class FunctionDecoder {
     public static function asFunctionArgs(data:String) {
@@ -81,12 +84,12 @@ class SignatureHandler implements SignatureHelpProvider
                                     cancelToken:CancellationToken):Thenable<SignatureHelp>
   {
       var client = hxContext.client;
-#if DO_FULL_PATCH
-#else
+
       var changeDebouncer = hxContext.changeDebouncer;
-#end      
-      var path:String = document.uri.fsPath;
-      
+
+      var documentState = hxContext.getDocumentState(document.uri.fsPath);
+      var path = documentState.path();
+           
       var text = document.getText();
       var char_pos = document.offsetAt(position);          
       var text = document.getText();
@@ -94,124 +97,117 @@ class SignatureHandler implements SignatureHelpProvider
 
       var displayMode = haxe.HaxeCmdLine.DisplayMode.Default; 
 
-      return new Thenable<SignatureHelp>(function(resolve) {
-          var trying = 1;
-          function make_request() {
-            var cl = client.cmdLine.save()
-            .cwd(hxContext.projectDir)
-            .hxml(hxContext.configuration.haxeDefaultBuildFile)
-            .noOutput()
-            .display(path, byte_pos, displayMode)
-            ;
-            client.sendAll(
-                function(s, message, err){
-                    if (err!=null) {
-                        if (trying <= 0) {
-                            err.message.displayAsError();
-                            resolve(null);
-                        } else {
-                            trying--;
-                            hxContext.launchServer().then(function(port){
-                                make_request(); 
-                            });
-                        }
-                    } else {
-                        if (message.severity==MessageSeverity.Error) {
-                            hxContext.applyDiagnostics(message);
-                            resolve(null);
-                        }
-                        else {
-                            var datas = message.stderr;
-                            var sh = new SignatureHelp();
-                            sh.activeParameter = 0;
-                            sh.activeSignature = 0;
-                            var sigs = [];
-                            sh.signatures = sigs;
-                            if ((datas.length > 2) && reType.match(datas[0])) {
-                                var opar = Std.parseInt(reType.matched(2))|0;
-                                var index = Std.parseInt(reType.matched(4))|0;
-                                if (index >= 0) sh.activeParameter = index;
-                                datas.shift();
-                                datas.pop();
-                                datas.pop();                           
-                                for (data in datas) {
-                                data = reGT.replace(data, ">");
-                                data = reLT.replace(data, "<");
-                                var args = data.asFunctionArgs();
-                                var ret = args.pop();
-                                var si = new SignatureInformation(data);
-                                sigs.push(si);
-                                var pis = args.map(function (v){
-                                    return new ParameterInformation(v.name, v.type);         
-                                });
-                                si.parameters = pis;
-                            } 
-                            }
-                            resolve(sh);
-                        }
-                    }
-                },
-                true
-            );
+      return new Thenable<SignatureHelp>(function(accept, reject) {
+          if (cancelToken.isCancellationRequested) {
+              reject(null);
           }
-          
-          var ds = hxContext.getDocumentState(path);
-          var isDirty = document.isDirty || ds.isDirty;
 
-      function doRequest() {
-        var isServerAvailable = client.isServerAvailable;
-        var isPatchAvailable = client.isPatchAvailable;
-
-        if (isPatchAvailable) {
-#if DO_FULL_PATCH
-            if (isDirty) {
-                hxContext.patchFullDocument(ds);
-                make_request();
-            } else {
-                make_request();
-            }
-#else
-            changeDebouncer.whenDone(make_request);
-#end
-        } else {
-            if (isDirty && isServerAvailable) {
-                document.save().then(function(saved) {
-                    if (saved) make_request();
-                    else resolve(null);
-                });
-            } else {
-                make_request();
-            }
-        }          
+          function make_request() {
+              var cl = client.cmdLine.save()
+              .cwd(hxContext.workingDir)
+              .hxml(hxContext.buildFile)
+              .noOutput()
+              .display(path, byte_pos, displayMode)
+              ;
+              client
+                .setContext({fileName:path, line:(position.line+1), column:char_pos})
+                .setCancelToken(cancelToken)
+              ;
+              hxContext.send(null, true, 1).then(
+                  function(m:Message) {
+                      var datas = m.stderr;
+                      var sh = new SignatureHelp();
+                      sh.activeParameter = 0;
+                      sh.activeSignature = 0;
+                      var sigs = [];
+                      sh.signatures = sigs;
+                      if ((datas.length > 2) && reType.match(datas[0])) {
+                          var opar = Std.parseInt(reType.matched(2))|0;
+                          var index = Std.parseInt(reType.matched(4))|0;
+                          if (index >= 0) sh.activeParameter = index;
+                          datas.shift();
+                          datas.pop();
+                          datas.pop();
+                          for (data in datas) {
+                              data = reGT.replace(data, ">");
+                              data = reLT.replace(data, "<");
+                              var args = data.asFunctionArgs();
+                              var ret = args.pop();
+                              var params = args.map(function(v){
+                                  return v.name + ":" + v.type;
+                              });
+                              data = "(" + params.join(", ") + "):" + ret.type;
+                              var si = new SignatureInformation(data);
+                              sigs.push(si);
+                              var pis = args.map(function(v){
+                                  return new ParameterInformation(v.name, v.type);
+                              });
+                              si.parameters = pis;
+                          }
+                      }
+                      accept(sh);
+                  },
+                  function(m:Message) {
+                      if (m.error != null) m.error.message.displayAsError();
+                      reject(null);
+                  }
+            );
       }
       
-      if (!client.isServerAvailable) {
-          var cl = client.cmdLine.save().version();
-          var patcher = cl.beginPatch(path);
-
-          if (isDirty) {
+      var ds = hxContext.getDocumentState(path);
+      var isDirty = client.isPatchAvailable ? ds.isDirty() : ds.isDirty() || document.isDirty;
+      
+      function doRequest() {
+          if (cancelToken.isCancellationRequested) {
+              reject(null);
+              return;
+          }
+          var isPatchAvailable = client.isPatchAvailable;
+          var isServerAvailable = client.isServerAvailable;
+          if (isPatchAvailable) {
 #if DO_FULL_PATCH
+            if (isDirty) {
+                hxContext.patchFullDocument(ds).then(
+                    function(ds) {make_request();},
+                    function(ds) {reject(null);}
+                );
+            } else {
+                make_request();
+            }
 #else
-              var text = document.getText();
-              patcher.delete(0, -1).insert(0, text.byteLength(), text);
+            changeDebouncer.whenDone(function(){make_request();});
 #end
           } else {
-              patcher.remove();
-          }
-                    
-          client.sendAll(
-            function (s:Socket, message, err) {
-                var isPatchAvailable = false;
-                if (client.isServerAvailable) {
-                    if (message.severity==MessageSeverity.Error) {
-                        if (message.stderr.length > 1) isPatchAvailable = HaxeClient.isOptionExists(HaxePatcherCmd.name(), message.stderr[1]);
-                    }
-                    else isPatchAvailable = true;
-                }
-                client.isPatchAvailable=isPatchAvailable;
-                doRequest();
-            },
-            true             
+              changeDebouncer.whenDone(function() {
+                  if (cancelToken.isCancellationRequested) {
+                      reject(null);
+                      return;
+                  }
+                  var ps = [];
+                  for (ds in hxContext.getDirtyDocuments()) {
+                      ds.diagnoseOnSave = false;
+                      ps.push(hxContext.saveDocument(ds));
+                  }
+                  if (ps.length == 0) make_request();
+                  else {
+                      JSPromise.all(ps).then(
+                          function(all) {
+                              if (cancelToken.isCancellationRequested) {
+                                  reject(null);
+                                  return;
+                              }
+                              make_request();
+                          },
+                          function(all){reject(null);}
+                      );
+                  }
+              });
+          }          
+      }
+      if (!client.isServerAvailable) {
+          hxContext.launchServer().then(
+              function(port) {doRequest();},
+              function(port) {reject(null);}
           );
       } else doRequest();
     });

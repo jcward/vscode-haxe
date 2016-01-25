@@ -6,15 +6,21 @@ import Socket.Error;
     var Info = 0;
     var Warning = 1;
     var Error = 2;
+    var Cancel = 3;
 }
 
-typedef Message = {stdout:Array<String>, stderr:Array<String>, infos:Array<Info>, severity:MessageSeverity};
+typedef Message = {stdout:Array<String>, stderr:Array<String>, infos:Array<Info>, severity:MessageSeverity, socket:Socket, error:Error};
 
-typedef Meta = {prefix:String, name:String, doc:String};
-typedef Define = {name:String, doc:String};
+typedef WithName = {name:String};
+typedef WithNameDoc = {>WithName, doc:String};
+typedef Keyword = WithName;
+typedef Klass = WithName;
+typedef Define = WithNameDoc;
+typedef Meta = {>WithNameDoc, prefix:String};
 typedef Option = {>Meta, param:String};
 
-typedef Job = {run:Void->Void, id:String};
+typedef CancelToken = {isCancellationRequested:Bool, onCancellationRequested:Null<(Dynamic->Void)->Void>}
+typedef Job = {run:Job->Void, id:String, group:Int, priority:Int, cancelToken:CancelToken, cancel:Bool};
 
 class RangeInfo {
     public var isLineRange:Bool;
@@ -97,9 +103,12 @@ class HaxeClient {
     public var defines:Array<Define>;
     public var definesByName:Map<String, Define>;
     public var metas:Array<Meta>;
+    public var keywords:Array<Keyword>;
 
     var queue:Array<Job>;
     var working:Bool;
+    
+    static var jobId:Int = 0;
     
     public function new(host:String, port:Int) {
         this.host = host;
@@ -113,13 +122,14 @@ class HaxeClient {
         options = [];
         defines = [];
         metas = [];
+        keywords = [];
         optionsByName = new Map<String, Option>();
         definesByName = new Map<String, Define>();
         isHaxeServer = false;
         isPatchAvailable = false;
         isServerAvailable = false;        
     }
-    /*
+  /*
     public function clone() {
         var tmp = new HaxeClient(host, port);
         return tmp.updateStatus(this);
@@ -130,33 +140,106 @@ class HaxeClient {
         isPatchAvailable = client.isPatchAvailable;
         return this;
     }
-    */
-    public function clear() {
+ */
+    function clear() {
         cmdLine.clear();
     }
-    public function sendAll(onClose:Null<Socket->Message->Null<Error>->Void>, ?restoreCmdLine=false, ?id:String=null) {
-        var cmds = cmdLine.get_cmds();
+    var sourceContext:{fileName:String, line:Int, column:Int};
+    public function setContext(ctx) {
+        sourceContext = ctx;
+        return this;
+    }
+    var cancelToken:CancelToken;
+    public function setCancelToken(ct:CancelToken) {
+        cancelToken = ct;
+        return this;
+    }
+    
+    var currentJob:Job = null;
+    
+    public function sendAll(onClose:Message->Void, ?restoreCmdLine=false, ?id:String=null, ?priority=0, ?clearCmdAfterExec = true) {
+        var ctx = sourceContext;
+        var ct = cancelToken;
+        
+        sourceContext = null;
+        cancelToken = null;
+        
+        var cmds = cmdLine.toString();
+        
+        inline function restore() {
+            if (restoreCmdLine) cmdLine.restore();
+            restoreCmdLine = false;            
+        }
+        
+        inline function closeWithCancel() {
+            restore();
+            if (onClose != null) onClose({stdout:null, stderr:null, infos:null, socket:null, error:null, severity:MessageSeverity.Cancel});
+            onClose = null;     
+            working = false;
+            currentJob = null;       
+        }
+        
+        if (cmds=="") {
+            closeWithCancel();
+            runQueue();
+            return null;
+        }
+
         cmdLine.clearPatch();
         var workingDir = cmdLine.workingDir;
         
-        if (restoreCmdLine) cmdLine.restore();
+        restore();
         
-        function run() {
+        function run(job:Job) {
+            currentJob = job;
+
+            var s:Socket = null;
+            inline function cancel() {
+                if (s !=null ) s.close();
+                closeWithCancel();
+            }
+            var ct = job.cancelToken; 
+            
+            inline function isCancelled() return (job.cancel || (ct != null && ct.isCancellationRequested));
+            
+            if (isCancelled()) {
+                cancel();
+                runQueue();
+                return;
+            }
+
             working = true;
     
-            var s = new Socket();
+            s = new Socket();
             s.connect(host, port,
                 function(s) {
+                    if (isCancelled()) {
+                        cancel();
+                        runQueue();
+                        return;
+                    }
                     s.write(cmds);
                     s.write("\x00");
-                }, 
-                null, null,
+                },
+                function(s, d) {
+                    if (isCancelled()) {
+                        cancel();
+                        runQueue();
+                        return;
+                    }
+                },
+                null,
                 function (s) {
                     working = false;
                     isServerAvailable = (s.error == null);
-
-                    clear();
+                    if (clearCmdAfterExec) clear();
                     
+                    if (isCancelled()) {
+                        cancel();
+                        runQueue();
+                        return;
+                    }
+
                     if (onClose != null) {
                         var stdout = [];
                         var stderr = [];
@@ -172,36 +255,90 @@ class HaxeClient {
                                 default:
                                     stderr.push(line);
                                     var info = haxe.Info.decode(line, workingDir);
+                                    if ((info == null) && (ctx != null) && (line != "")) {
+                                        var msg = [ctx.fileName, Std.string(ctx.line),' character ${ctx.column} ', line].join(":");
+                                        info = haxe.Info.decode(msg, workingDir);
+                                    }
                                     if (info != null) infos.push(info.info);
                             }
                         }
                         var severity = hasError?MessageSeverity.Error:MessageSeverity.Warning;
-                        onClose(s, {stdout:stdout, stderr:stderr, infos:infos, severity:severity}, s.error);
+                        onClose({stdout:stdout, stderr:stderr, infos:infos, severity:severity, socket:s, error:s.error});
                     }
                     runQueue();
                 }
             );
         }
-        var job = {run:run, id:id};
-        queue.push(job);
+
+        if (id=="") id = null;
+        
+        var group = 0;
+        
+        if (id != null) {
+            var tmp = id.split("@");
+            id = tmp[0];
+            if (id == "") id = null;
+            if (tmp.length > 1) group = Std.parseInt(tmp[1]);
+        }
+        
+        jobId++;
+
+        var sId = "-" + Std.string(jobId);
+        if (id == null) id = sId;
+        else id += sId; 
+        
+        var job:Job = {run:run, id:id, group:group, priority:priority, cancelToken:ct, cancel:false};
+        
+        if (queue.length == 0) queue.push(job);
+        else {
+            var oq = queue;
+            queue = [];
+            if (group != 0 && currentJob != null && group >= currentJob.group) {
+                currentJob.cancel = true;
+            }
+            var jobPushed = false;
+            while (oq.length > 0) {
+                var j = oq.shift();
+                if (j.priority < priority) {
+                    jobPushed = true;
+                    queue.push(job);
+                    queue.push(j);
+                    break;
+                } else {
+                    queue.push(j);
+                }
+            }            
+            queue = queue.concat(oq);
+            if (!jobPushed) queue.push(job);
+        }
         if (!working) runQueue();
+        return job;
     }
+
     function runQueue() {
         if (queue.length==0) return;
-        var job:Job=queue.shift();
-        var id = job.id;
-        if (id!=null) {
+        var job = queue.shift();
+        var group = job.group;
+        if (group != 0) {
             var oq = queue;
             queue = [];
             while(oq.length > 0) {
                 var nj = oq.shift();
-                if (nj.id==id) job = nj;
+                if (nj.group >= group) {
+                    if (nj.priority != job.priority) {
+                        nj.cancel = true;
+                        nj.run(nj);
+                    } else {
+                        job.cancel = true;
+                        job.run(job);
+                        job = nj;
+                    }
+                }
                 else queue.push(nj);               
             }
         }
         if (job != null) {
-            //trace('running ${id} ${Date.now()}');
-            job.run();
+            job.run(job);
         }
     }
     public static function isOptionExists(optionName:String, data:String) {
@@ -221,6 +358,8 @@ class HaxeClient {
 #end
     static var reCheckOptionName = ~/([^\s]+)(\s+(.+))?/;
 
+    static var reKeywords = ~/n=\\"([^\\]+?)\\"/g;
+
     inline function unformatDoc(s:String) return s;
 
     public function infos(onData:Null<HaxeClient->Void>) {
@@ -237,9 +376,13 @@ class HaxeClient {
                     cmdLine.helpDefines();
                 case 2:
                     cmdLine.helpMetas();
+                case 3:
+                    cmdLine.keywords();
             }
             sendAll(
-                function(s, message, error) {
+                function(message) {
+                    var s = message.socket;
+                    var error = message.error;
                     var abort = true;
                     isServerAvailable = (error == null);
                     if (isServerAvailable) {
@@ -282,12 +425,19 @@ class HaxeClient {
                                         metas.push({prefix:reCheckMeta.matched(1), name:reCheckMeta.matched(2), doc:unformatDoc(reCheckMeta.matched(3))});
                                     }
                                 }
+                           case 3:
+                                var datas = message.stderr;
+                                abort = (datas.length <= 0);
+                                if (!abort) {
+                                    reKeywords.map(datas[0], function(r) {
+                                        var match = r.matched(1);
+                                        keywords.push({name:match});
+                                        return match;
+                                    });
+                                }
                         }
                     }
                     if (abort) {
-                        //trace(options);
-                        //trace(defines);
-                        //trace(metas);
                         if (onData!=null) onData(this);
                     } else {
                         step++;
