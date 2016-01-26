@@ -1,0 +1,6 @@
+.vscode/**/*
+.git/**/*
+build.hxml
+src/**/*
+test_proj/**/*
+vscode-extern/**/*

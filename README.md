@@ -1,9 +1,11 @@
 # vscode-haxe
 Haxe language extension for Visual Studio Code
+by Patrick Le Clec'h, Jeff Ward, and Dan Korostelev
 
 This extension provides:
-- Syntax highlighting for .hx and .hxml
-- Code completion (ALPHA / EXPERIMENTAL, see below)
+- Syntax highlighting for .hx and .hxml files
+- Code completion (work in progress)
+- Function signature completion
 - Jump / peek definition (ctrl-click / ctrl-hover)
 
 Feature  | Preview
@@ -16,17 +18,17 @@ Place the vscode-haxe directory in your `.vscode/extensions` directory:
 - Windows: `%USERPROFILE%\.vscode\extensions`
 - Linux / Mac: `~/.vscode/extensions`
 
-#Code completion status: ALPHA
-The code completion in this extension is currently in alpha. There are bugs, limitations, and requirements that still need to be worked out. There's an effort to standardize Haxe IDE support over at [snowkit/Tides](https://github.com/snowkit/tides). When this is ready, I'll integrate it (no need to duplicate effort and provide divergent experiences.)
+#Code completion status: BETA
+The code completion in this extension is currently in beta. There are bugs, limitations, and requirements that still need to be worked out. There's an effort to standardize Haxe IDE support over at [snowkit/Tides](https://github.com/snowkit/tides). When this is ready, we'll integrate it (no need to duplicate effort and provide divergent experiences.)
 
 #Current limitations:
-- Currently only supports code/package completion, no function signatures, etc.
-- You must start the haxe completion server yourself. Luckily it's easy. Open a terminal and run `haxe --wait 6000` and let it sit there while you edit.
-- Currently requires a file named `build.hxml` in the root of the workspace (the folder you open in Code.)
-
-I've provided a `test_proj` for you to try it. Start your completion server, open this folder in Code, and try it! You can add haxelib libraries to `test_proj`'s build.hxml if you want to see if they work.
+Some features may require a forthcoming version of the Haxe compiler.
 
 #Framework notes:
 Some frameworks support the creation of .hxml files so you can use completion with your project.
 
-**OpenFL's** display command will show the contents of the necessary .hxml file. On Windows, paste the output into a build.hxml file, or on Linux/Mac, you can create a build.hxml file in your project directory by running, e.g. `openfl display neko > build.hxml` (substitue the proper platform name for your project.)
+**OpenFL's** display command will show the contents of the necessary .hxml file. On Windows, paste the output into a `build.hxml` file, or on Linux/Mac, you can create a `build.hxml` file in your project directory by running, e.g. `openfl display windows > build.hxml` (substitue the proper platform name for your project.)
+
+**Kha** creates a build/project-<platform>.hxml file you can use.
+
+If anyone has info on **Snow** or other frameworks' .hxml file output, I'd be happy to add it here.

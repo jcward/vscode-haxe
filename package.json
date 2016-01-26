@@ -2,7 +2,15 @@
 	"name": "haxe",
 	"description": "Haxe Language Extension",
 	"version": "0.0.2",
-	"publisher": "Jeff Ward & Dan Korostelev & Patrick Le Clec'h",
+	"publisher": "haxedevs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jcward/vscode-haxe"
+  },
+  "galleryBanner": {
+    "color": "#F68712"
+  },
+  "icon": "haxe-logo.png",
 	"engines": {
 		"vscode": "^0.10.1"
 	},
