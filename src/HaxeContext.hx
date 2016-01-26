@@ -420,6 +420,7 @@ class HaxeContext  {
                         var ds = dd[i];
                         ds.diagnoseOnSave = (i == (cnt-1));
                         if (ds.isSaving()) continue;
+                        diagnostics.delete(untyped ds.document.uri);
                         saveFullDocument(ds);
                     }
                 }

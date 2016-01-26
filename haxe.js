@@ -439,6 +439,7 @@ HaxeContext.prototype = {
 						var ds3 = dd1[i3];
 						ds3.diagnoseOnSave = i3 == cnt1 - 1;
 						if(ds3.lastSave < ds3.saveStartAt) continue;
+						this.diagnostics["delete"](ds3.document.uri);
 						this.saveFullDocument(ds3);
 					}
 				}
@@ -855,27 +856,6 @@ Main.main = $hx_exports["activate"] = function(context) {
 	hc.init();
 	new HxmlContext(hc);
 };
-Main.test_register_command = function(context) {
-	context.subscriptions.push(Vscode.commands.registerCommand("haxe.hello",function() {
-		Vscode.window.showInformationMessage("Hello from haxe!");
-	}));
-};
-Main.test_register_hover = function(context) {
-	var disposable = Vscode.languages.registerHoverProvider("haxe",{ provideHover : function(document,position,cancelToken) {
-		return new Vscode.Hover("I am a hover! pos: " + JSON.stringify(position));
-	}});
-	context.subscriptions.push(disposable);
-};
-Main.test_register_hover_thenable = function(context) {
-	var disposable = Vscode.languages.registerHoverProvider("haxe",{ provideHover : function(document,position,cancelToken) {
-		var s = JSON.stringify(position);
-		return new Promise(function(resolve) {
-			var h = new Vscode.Hover("I am a thenable hover! pos: " + s);
-			resolve(h);
-		});
-	}});
-	context.subscriptions.push(disposable);
-};
 Math.__name__ = true;
 var Socket = function() {
 	this.s = new js_node_net_Socket();
@@ -1128,6 +1108,12 @@ features_CompletionHandler.prototype = {
 					case "var":
 						if(ip == "1") ci.kind = Vscode.CompletionItemKind.Property; else if((f & 1) != 0) ci.kind = Vscode.CompletionItemKind.Property; else ci.kind = Vscode.CompletionItemKind.Field;
 						break;
+					case "package":
+						ci.kind = Vscode.CompletionItemKind.Module;
+						break;
+					case "type":
+						ci.kind = Vscode.CompletionItemKind.Class;
+						break;
 					default:
 						ci.kind = Vscode.CompletionItemKind.Field;
 					}
@@ -1154,11 +1140,19 @@ features_CompletionHandler.prototype = {
 			var displayMode = haxe_DisplayMode.Default;
 			var lastChar = text.charAt(char_pos - 1);
 			var isDot = lastChar == ".";
-			var isTriggerChar = isDot || lastChar == "{";
 			var isProbablyMeta = lastChar == ":";
-			var displayClasses = false;
-			if(!isProbablyMeta && !isTriggerChar) {
+			var doMetaCompletion = isProbablyMeta && text.charAt(char_pos - 2) == "@";
+			var displayClasses = isProbablyMeta && !doMetaCompletion;
+			var isTriggerChar = isDot || lastChar == "{" || displayClasses;
+			if(!displayClasses && !doMetaCompletion && !isTriggerChar) {
 				var j = char_pos - 2;
+				if(features_CompletionHandler.reWS.match(lastChar)) {
+					while(j >= 0) {
+						if(!features_CompletionHandler.reWS.match(text.charAt(j))) break;
+						--j;
+					}
+					char_pos = j + 1;
+				}
 				while(j >= 0) {
 					if(!features_CompletionHandler.reWord.match(text.charAt(j))) break;
 					--j;
@@ -1180,7 +1174,7 @@ features_CompletionHandler.prototype = {
 			makeCall = isTriggerChar;
 			if(!makeCall) {
 				var items = [];
-				if(isProbablyMeta && text.charAt(char_pos - 2) == "@") {
+				if(doMetaCompletion) {
 					var _g13 = 0;
 					var _g23 = _g.hxContext.client.metas;
 					while(_g13 < _g23.length) {
