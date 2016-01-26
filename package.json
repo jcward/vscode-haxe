@@ -1,7 +1,7 @@
 {
-	"name": "Haxe",
+	"name": "haxe",
 	"description": "Haxe Language Extension",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"publisher": "haxedevs",
   "repository": {
     "type": "git",
