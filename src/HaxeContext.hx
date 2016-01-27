@@ -120,6 +120,24 @@ class HaxeContext  {
 
     public inline function needDiagnostic(ds:DocumentState) return ds.lastSave > lastDiagnostic;
 
+    public function getPackageFromString(path:String) return {
+        var npath = path.toLowerCase();
+        for (cp in classPaths) {
+            var tmp = npath.split(cp);
+            if (tmp.length > 1) {
+                tmp.shift();
+                var fileAndPath = path.substr(cp.length);
+                var dirs = fileAndPath.split(Path.sep);
+                var file = dirs.pop();
+
+                return {path:path, pack:dirs.join("."), fileAndPath:fileAndPath, file:file};
+            }
+        }
+        return null;
+    }
+    public function getPackageFromDS(ds:DocumentState) {
+        return getPackageFromString(Path.normalize(ds.realPath));
+    }
     public function tmpToReal(fileName:String) {
         var nfile = fileName.normalize();
         var tmp = tmpToRealMap.get(nfile);
@@ -220,22 +238,15 @@ class HaxeContext  {
     public function createTmpFile(ds:DocumentState) {
         if (useTmpDir && ds.document != null && ds.tmpPath == null) {
             var path = Path.normalize(ds.realPath);
-            var npath = path.toLowerCase();
-            var file = null;
-            var pack = "";
-            for (cp in classPaths) {
-                var tmp = npath.split(cp);
-                if (tmp.length > 1) {
-                    tmp.shift();
-                    pack = cp;
-                    file = path.substr(cp.length);
-                    break;
-                }
-            }
-            if (pack != "") {
+            var tmp = getPackageFromString(path);
+            if (tmp != null) {
+                var file = tmp.fileAndPath;
+
                 var tmpFile = Path.join(tmpProjectDir, file);
+
                 var dirs = file.split(Path.sep);
                 dirs.pop();
+
                 if (dirs.length > 0) {
                     dirs = [tmpProjectDir].concat(dirs);
                     try {

@@ -161,6 +161,27 @@ HaxeContext.prototype = {
 	,needDiagnostic: function(ds) {
 		return ds.lastSave > this.lastDiagnostic;
 	}
+	,getPackageFromString: function(path) {
+		var npath = path.toLowerCase();
+		var _g = 0;
+		var _g1 = this.classPaths;
+		while(_g < _g1.length) {
+			var cp = _g1[_g];
+			++_g;
+			var tmp = npath.split(cp);
+			if(tmp.length > 1) {
+				tmp.shift();
+				var fileAndPath = HxOverrides.substr(path,cp.length,null);
+				var dirs = fileAndPath.split(js_node_Path.sep);
+				var file = dirs.pop();
+				return { path : path, pack : dirs.join("."), fileAndPath : fileAndPath, file : file};
+			}
+		}
+		return null;
+	}
+	,getPackageFromDS: function(ds) {
+		return this.getPackageFromString(js_node_Path.normalize(ds.realPath));
+	}
 	,tmpToReal: function(fileName) {
 		var nfile = Tool.normalize(fileName);
 		var tmp;
@@ -247,23 +268,9 @@ HaxeContext.prototype = {
 	,createTmpFile: function(ds) {
 		if(this.useTmpDir && ds.document != null && ds.tmpPath == null) {
 			var path = js_node_Path.normalize(ds.realPath);
-			var npath = path.toLowerCase();
-			var file = null;
-			var pack = "";
-			var _g = 0;
-			var _g1 = this.classPaths;
-			while(_g < _g1.length) {
-				var cp = _g1[_g];
-				++_g;
-				var tmp = npath.split(cp);
-				if(tmp.length > 1) {
-					tmp.shift();
-					pack = cp;
-					file = HxOverrides.substr(path,cp.length,null);
-					break;
-				}
-			}
-			if(pack != "") {
+			var tmp = this.getPackageFromString(path);
+			if(tmp != null) {
+				var file = tmp.fileAndPath;
 				var tmpFile = js_node_Path.join(this.tmpProjectDir,file);
 				var dirs = file.split(js_node_Path.sep);
 				dirs.pop();
@@ -626,7 +633,6 @@ HaxeContext.prototype = {
 			var fileName = tmp1.next();
 			var diags1 = __map_reserved[fileName] != null?all.getReserved(fileName):all.h[fileName];
 			fileName = this.tmpToReal(fileName);
-			console.log("fn:" + fileName);
 			var url = Vscode.Uri.file(fileName);
 			if(diags1 == null) {
 				this.diagnostics.set(url,[]);
@@ -1224,13 +1230,6 @@ features_CompletionHandler.prototype = {
 			var word = "";
 			var displayClasses = isProbablyMeta && !doMetaCompletion;
 			var isTriggerChar = isDot || lastChar == "{" || displayClasses;
-			if(features_CompletionHandler.reWS.match(lastChar)) {
-				console.log(new Date().getTime() - ds.lastModification);
-				if(new Date().getTime() - ds.lastModification < 250) {
-					reject([]);
-					return;
-				}
-			}
 			if(!displayClasses && !doMetaCompletion && !isTriggerChar) {
 				var j = char_pos - 2;
 				if(features_CompletionHandler.reWS.match(lastChar)) {
@@ -1244,10 +1243,43 @@ features_CompletionHandler.prototype = {
 					if(!features_CompletionHandler.reWord.match(text.charAt(j))) break;
 					--j;
 				}
-				if(HxOverrides.substr(text,j + 1,char_pos - 1 - j) == "import" && features_CompletionHandler.reWS.match(lastChar)) {
-					isTriggerChar = true;
-					displayClasses = true;
-				} else {
+				switch(HxOverrides.substr(text,j + 1,char_pos - 1 - j)) {
+				case "import":
+					if(features_CompletionHandler.reWS.match(lastChar)) {
+						isTriggerChar = true;
+						displayClasses = true;
+					} else {
+						while(j >= 0) {
+							if(!features_CompletionHandler.reWS.match(text.charAt(j))) break;
+							--j;
+						}
+						lastChar = text.charAt(j);
+						isDot = lastChar == ".";
+						if(!isDot) isTriggerChar = lastChar == "{"; else isTriggerChar = true;
+						if(isTriggerChar) char_pos = j + 1;
+					}
+					break;
+				case "package":
+					if(features_CompletionHandler.reWS.match(lastChar)) {
+						var tmp = _g.hxContext.getPackageFromDS(ds);
+						if(tmp != null) {
+							var ci = new Vscode.CompletionItem(tmp.pack + ";");
+							ci.kind = Vscode.CompletionItemKind.File;
+							accept([ci]);
+							return;
+						}
+					} else {
+						while(j >= 0) {
+							if(!features_CompletionHandler.reWS.match(text.charAt(j))) break;
+							--j;
+						}
+						lastChar = text.charAt(j);
+						isDot = lastChar == ".";
+						if(!isDot) isTriggerChar = lastChar == "{"; else isTriggerChar = true;
+						if(isTriggerChar) char_pos = j + 1;
+					}
+					break;
+				default:
 					while(j >= 0) {
 						if(!features_CompletionHandler.reWS.match(text.charAt(j))) break;
 						--j;
@@ -1259,6 +1291,12 @@ features_CompletionHandler.prototype = {
 				}
 			}
 			makeCall = isTriggerChar;
+			if(makeCall && features_CompletionHandler.reWS.match(lastChar)) {
+				if(new Date().getTime() - ds.lastModification < 250) {
+					reject([]);
+					return;
+				}
+			}
 			if(!makeCall) {
 				var items = [];
 				if(doMetaCompletion) {
@@ -1267,9 +1305,9 @@ features_CompletionHandler.prototype = {
 					while(_g14 < _g24.length) {
 						var data = _g24[_g14];
 						++_g14;
-						var ci = new Vscode.CompletionItem(data.name);
-						ci.documentation = data.doc;
-						items.push(ci);
+						var ci4 = new Vscode.CompletionItem(data.name);
+						ci4.documentation = data.doc;
+						items.push(ci4);
 					}
 				}
 				accept(items);

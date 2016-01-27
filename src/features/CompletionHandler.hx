@@ -130,13 +130,6 @@ class CompletionHandler implements CompletionItemProvider
 
         var isTriggerChar = (isDot || (lastChar == '{') || displayClasses);
 
-        if (reWS.match(lastChar)) {
-            if ((getTime()-ds.lastModification) < 250) {
-                reject([]);
-                return;
-            }
-        }
-
         if (!displayClasses && !doMetaCompletion && !isTriggerChar) {
             var j = char_pos - 2;
             if (reWS.match(lastChar)) {
@@ -151,22 +144,38 @@ class CompletionHandler implements CompletionItemProvider
                 j--;
             }
             var word = text.substr(j+1, char_pos-1-j);
-            if (word == "import" && reWS.match(lastChar)) {
-                isTriggerChar = true;
-                displayClasses = true;
-            } else {
-                while (j>=0) {
-                    if (!reWS.match(text.charAt(j))) break;
-                    j--;
-                }
-                lastChar = text.charAt(j);
-                isDot = lastChar == '.';
-                isTriggerChar = (isDot || (lastChar == '{'));
-                if (isTriggerChar) char_pos = j + 1;
+            switch(word) {
+                case "import" if (reWS.match(lastChar)):
+                    isTriggerChar = true;
+                    displayClasses = true;
+                case "package" if (reWS.match(lastChar)):
+                    var tmp = hxContext.getPackageFromDS(ds);
+                    if (tmp != null) {
+                        var ci = new Vscode.CompletionItem(tmp.pack+";");
+                        ci.kind = Vscode.CompletionItemKind.File;
+                        accept([ci]);
+                        return;
+                    }
+                default:
+                    while (j>=0) {
+                        if (!reWS.match(text.charAt(j))) break;
+                        j--;
+                    }
+                    lastChar = text.charAt(j);
+                    isDot = lastChar == '.';
+                    isTriggerChar = (isDot || (lastChar == '{'));
+                    if (isTriggerChar) char_pos = j + 1;
             }
         }
 
         makeCall = isTriggerChar;
+
+        if (makeCall && reWS.match(lastChar)) {
+            if ((getTime()-ds.lastModification) < 250) {
+                reject([]);
+                return;
+            }
+        }
 
         if (!makeCall) {
             var items = [];
