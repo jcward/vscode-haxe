@@ -87,7 +87,7 @@
                 },
                 "haxe.haxeDiagnosticDelay": {
                 "type": "integer",
-                "default": 500,
+                "default": 2000,
                 "description": "Time (in ms) after we can launch a file validation"
                 }
             }

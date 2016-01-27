@@ -17,25 +17,25 @@ import haxe.HaxeCmdLine.IdeFlag;
 class CompletionHandler implements CompletionItemProvider
 {
   var hxContext:HaxeContext;
-  
+
   public function new(hxContext:HaxeContext):Void
   {
       this.hxContext = hxContext;
-      
+
       var context = hxContext.context;
-            
+
       var disposable = Vscode.languages.registerCompletionItemProvider(HaxeContext.languageID(), this, '.');
       context.subscriptions.push(disposable);
   }
-  
+
   static var reI=~/<i n="([^"]+)" k="([^"]+)"( ip="([0-1])")?( f="(\d+)")?><t>([^<]*)<\/t><d>([^<]*)<\/d><\/i>/;
   static var reGT = ~/&gt;/g;
   static var reLT = ~/&lt;/g;
   static var reMethod = ~/Void|Unknown/;
-  
+
   public function parse_items(msg:Message):Array<CompletionItem> {
       var rtn = new Array<CompletionItem>();
-      
+
       if (msg.severity==MessageSeverity.Error) {
           hxContext.applyDiagnostics(msg);
           return rtn;
@@ -84,11 +84,14 @@ class CompletionHandler implements CompletionItemProvider
                   }
                   rtn.push(ci);
               }
-          }     
+          }
       }
       return rtn;
   }
-
+  
+  static var reWord = ~/[a-zA-Z_$]/;
+  static var reWS = ~/[\r\n\t\s]/;
+  
   public function provideCompletionItems(document:TextDocument,
                                          position:Position,
                                          cancelToken:CancellationToken):Thenable<Array<CompletionItem>>
@@ -98,73 +101,100 @@ class CompletionHandler implements CompletionItemProvider
     //else if (subline.indexOf('(')>=0) {
     //  dot_offset = subline.lastIndexOf('(') - position.character + 1;
     //}
-    
-    var changeDebouncer = hxContext.changeDebouncer;
-    var client = hxContext.client;
+    return new Thenable<Array<CompletionItem>>(function(resolve, reject) {
+        if (cancelToken.isCancellationRequested) {
+            reject([]);
+            return;
+        }
 
-    var text = document.getText();
-    var char_pos = document.offsetAt(position);
-    var path:String = document.uri.fsPath;
+        var changeDebouncer = hxContext.changeDebouncer;
+        var client = hxContext.client;
 
-    var documentState = hxContext.getDocumentState(path);
-    var lm = documentState.lastModification;
+        var text = document.getText();
+        var char_pos = document.offsetAt(position);
+        var path:String = document.uri.fsPath;
 
-    var delta = hxContext.getTime() - lm;
-    
-    var makeCall = false;
-    var displayMode = haxe.HaxeCmdLine.DisplayMode.Default;
-  
-    var lastChar = text.charAt(char_pos-1);
-    var isDot =  lastChar == '.';
-    
-    makeCall = isDot;
+        var ds = hxContext.getDocumentState(path);
+        var lm = ds.lastModification;
 
-    if (isDot) {
-        if (delta > 150) makeCall = true;
-    }
-    
-    if (!makeCall)
-        return new Thenable<Array<CompletionItem>>(function(resolve) {resolve([]);});
+        var line = document.lineAt(position);
+
+        var delta = hxContext.getTime() - lm;
+
+        var makeCall = false;
+        var displayMode = haxe.HaxeCmdLine.DisplayMode.Default;
+
+        var lastChar = text.charAt(char_pos-1);
+        var isDot =  lastChar == '.';
         
-    if (!isDot) displayMode = haxe.HaxeCmdLine.DisplayMode.Position;
+        var word = "";
 
-    var byte_pos = Tool.byte_pos(text, char_pos);
+        if (!isDot) {
+            var j = char_pos - 2;
+            while (j >= 0) {
+                if (!reWord.match(text.charAt(j))) break;
+                j--;
+            }
+            var word = text.substr(j+1, char_pos-1-j);
+            while (j>=0) {
+                if (!reWS.match(text.charAt(j))) break;
+                j--;
+            }
+            lastChar = text.charAt(j);
+            isDot = lastChar == '.';
+            if (isDot) char_pos = j + 1;
+        }
+        
+        makeCall = isDot;
 
-    return new Thenable<Array<CompletionItem>>(function(resolve) {
-      var trying = 1;
+        if (!makeCall) {
+            reject([]);
+            return;
+        }
 
-      function make_request() {
-          var cl = client.cmdLine.save()
-          .cwd(hxContext.projectDir)
-          .define("display-details")
-          .hxml(hxContext.configuration.haxeDefaultBuildFile)
-          .noOutput()
-          .display(path, byte_pos, displayMode);
-          
-          client.sendAll(
-              function (s, message, err) {
-                if (err != null) {
-                    if (trying <= 0) {
-                        err.message.displayAsError();
-                        resolve([]);
+        if (!isDot) displayMode = haxe.HaxeCmdLine.DisplayMode.Position;
+
+        var byte_pos = Tool.byte_pos(text, char_pos);
+        
+        var trying = 1;
+
+        function make_request() {
+            if (cancelToken.isCancellationRequested) {
+                reject([]);
+                return;
+            }
+
+            var cl = client.cmdLine.save()
+            .cwd(hxContext.projectDir)
+            .define("display-details")
+            .hxml(hxContext.configuration.haxeDefaultBuildFile)
+            .noOutput()
+            .display(path, byte_pos, displayMode);
+
+            client.sendAll(
+                function (s, message, err) {
+                    if (err != null) {
+                        if (trying <= 0) {
+                            err.message.displayAsError();
+                            reject([]);
+                        } else {
+                            trying--;
+                            hxContext.launchServer().then(function(port) {
+                            make_request();
+                            });
+                        }
                     } else {
-                        trying--;
-                        hxContext.launchServer().then(function(port) {
-                           make_request(); 
-                        });
-                    }                
-                } else {
-                    resolve(parse_items(message));
-                }
-             },
-             true
-          );
-      }
+                        resolve(parse_items(message));
+                    }
+                },
+                true
+            );
+        }
 
       // TODO: haxe completion server requires save before compute...
       //       try temporary -cp?
       //       See: https://github.com/HaxeFoundation/haxe/issues/4651
-      
+
       var isDirty = document.isDirty;
 
       function doRequest() {
@@ -183,16 +213,18 @@ class CompletionHandler implements CompletionItemProvider
 #end
         } else {
             if (isDirty && isServerAvailable) {
+                ds.diagnoseOnSave = false;
                 document.save().then(function (saved) {
-                    if (saved) make_request(); 
-                    else resolve([]);
+                    if (cancelToken.isCancellationRequested || !saved) {
+                        reject([]);
+                    } else if (saved) make_request();
                 });
             } else {
                 make_request();
             }
-        }          
+        }
       }
-      
+
       if (!client.isServerAvailable) {
           var cl = client.cmdLine.save().version();
           var patcher = cl.beginPatch(path);
@@ -206,7 +238,7 @@ class CompletionHandler implements CompletionItemProvider
           } else {
               patcher.remove();
           }
-                    
+
           client.sendAll(
             function (s:Socket, message, err) {
                 var isPatchAvailable = false;
@@ -219,12 +251,12 @@ class CompletionHandler implements CompletionItemProvider
                 client.isPatchAvailable = isPatchAvailable;
                 doRequest();
             },
-            true             
+            true
           );
       } else doRequest();
     });
   }
-	
+
   public function resolveCompletionItem(item:CompletionItem,
                                         cancelToken:CancellationToken):CompletionItem {
     return item;
