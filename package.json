@@ -18,7 +18,9 @@
 		"Languages"
 	],
 	"activationEvents": [
-		"onLanguage:haxe"
+		"onLanguage:haxe",
+        "onLanguage:hxml",
+        "workspaceContains:build.hxml"
 	],
 	"main": "./haxe.js",
 	"contributes": {
@@ -27,7 +29,7 @@
 				"command": "haxe.hello",
 				"title": "Hello from Haxe!"
 			}
-		],	
+		],
 		"languages": [
 			{
 				"id": "haxe",
