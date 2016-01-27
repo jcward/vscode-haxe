@@ -27,7 +27,7 @@ class HaxeCmdLine {
     var stack(default, null):Array<CmdLineStackItem>;
     var patchers(default, null):Map<String, Patcher>;
     public var workingDir(default, null):String;
-     
+
     public function new() {
         reset();
     }
@@ -44,7 +44,7 @@ class HaxeCmdLine {
     public function define(name:String, ?value:String=null):HaxeCmdLine {
         if (name != "") {
             var str = '-D $name';
-            if (value!=null) str+='=$value'; 
+            if (value!=null) str+='=$value';
             cmds.push(str);
         }
         return this;
@@ -56,11 +56,11 @@ class HaxeCmdLine {
     public function cwd(dir):HaxeCmdLine {
         unique.set("--cwd", '$dir');
         workingDir = dir;
-        return this;        
+        return this;
     }
     public function verbose():HaxeCmdLine {
         unique.set("-v", "");
-        return this;       
+        return this;
     }
     public function version():HaxeCmdLine {
         unique.set("-version", "");
@@ -68,18 +68,18 @@ class HaxeCmdLine {
     }
     public function wait(port:Int):HaxeCmdLine {
         unique.set("--wait", '$port');
-        return this;       
+        return this;
     }
     public function noOutput():HaxeCmdLine {
         unique.set("--no-output", "");
-        return this;       
+        return this;
     }
     public function keywords(){
         unique.set("--display", "keywords");
     }
     public function classes(){
         unique.set("--display", "classes");
-    }    
+    }
     public function display(fileName:String, pos:Int, mode:DisplayMode):HaxeCmdLine {
         var dm = switch (mode) {
             case Default: "";
@@ -94,15 +94,15 @@ class HaxeCmdLine {
     }
     public function help():HaxeCmdLine {
         unique.set("--help", "");
-        return this;       
+        return this;
     }
     public function helpDefines():HaxeCmdLine {
         unique.set("--help-defines", "");
-        return this;       
+        return this;
     }
     public function helpMetas():HaxeCmdLine {
         unique.set("--help-metas", "");
-        return this;       
+        return this;
     }
     public function custom(argName:String, data:String, ?is_unique=true):HaxeCmdLine {
         if (is_unique) unique.set(argName, data);
@@ -113,7 +113,7 @@ class HaxeCmdLine {
         var tmp = patchers.get(fileName);
         if (tmp == null) tmp = new Patcher(fileName);
         patchers.set(fileName, tmp);
-        return tmp; 
+        return tmp;
     }
     public function clearPatch() {
         patchers = new Map<String, Patcher>();
@@ -152,7 +152,7 @@ class HaxeCmdLine {
             cmds.push(key+" " +unique.get(key));
         }
         for (key in patchers.keys()) {
-            cmds.push(patchers.get(key).toString());            
+            cmds.push(patchers.get(key).toString());
         }
         return cmds.join("\n");
     }

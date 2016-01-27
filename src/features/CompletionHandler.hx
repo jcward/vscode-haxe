@@ -21,13 +21,13 @@ import js.Promise as JSPromise;
 class CompletionHandler implements CompletionItemProvider
 {
   var hxContext:HaxeContext;
-  
+
   public function new(hxContext:HaxeContext):Void
   {
       this.hxContext = hxContext;
-      
+
       var context = hxContext.context;
-            
+
       var disposable = Vscode.languages.registerCompletionItemProvider(HaxeContext.languageID(), this, '.', ':', '{', ' ');
       context.subscriptions.push(disposable);
   }
@@ -78,18 +78,22 @@ class CompletionHandler implements CompletionItemProvider
                         if (ip=="1") ci.kind = Vscode.CompletionItemKind.Property;
                         else if ((f & IdeFlag.Property) != 0) ci.kind = Vscode.CompletionItemKind.Property;
                         else ci.kind = Vscode.CompletionItemKind.Field;
+                      case "package":
+                        ci.kind = Vscode.CompletionItemKind.Module;
+                      case "type":
+                        ci.kind = Vscode.CompletionItemKind.Class;
                       default:
                         ci.kind = Vscode.CompletionItemKind.Field;
                   }
                   rtn.push(ci);
               }
-          }     
+          }
       } else {
           rtn.push(null);
       }
       return rtn;
   }
-  
+
   static var reWord = ~/[a-zA-Z_$]/;
   static var reWS = ~/[\r\n\t\s]/;
 
@@ -108,44 +112,66 @@ class CompletionHandler implements CompletionItemProvider
         var client = hxContext.client;
         var text = document.getText();
         var char_pos = document.offsetAt(position);
+        var ds = hxContext.getDocumentState(document.uri.fsPath);
+        var path = ds.path();
 
-        var documentState = hxContext.getDocumentState(document.uri.fsPath);
-        var path = documentState.path();
-         
         var makeCall = false;
         var displayMode = haxe.HaxeCmdLine.DisplayMode.Default;
-    
+
         var lastChar = text.charAt(char_pos-1);
         var isDot =  lastChar == '.';
-        
-        var isTriggerChar = (isDot || (lastChar == '{'));
+
         var isProbablyMeta = (lastChar == ":");
-        
+        var doMetaCompletion = isProbablyMeta && (text.charAt(char_pos-2)=="@");
+
         var word = "";
 
-        if (!isProbablyMeta && !isTriggerChar) {
+        var displayClasses = isProbablyMeta && !doMetaCompletion;
+
+        var isTriggerChar = (isDot || (lastChar == '{') || displayClasses);
+
+        if (reWS.match(lastChar)) {
+            if ((getTime()-ds.lastModification) < 250) {
+                reject([]);
+                return;
+            }
+        }
+
+        if (!displayClasses && !doMetaCompletion && !isTriggerChar) {
             var j = char_pos - 2;
+            if (reWS.match(lastChar)) {
+                while(j >= 0) {
+                    if (!reWS.match(text.charAt(j))) break;
+                    j--;
+                }
+                char_pos = j + 1;
+            }
             while (j >= 0) {
                 if (!reWord.match(text.charAt(j))) break;
                 j--;
             }
             var word = text.substr(j+1, char_pos-1-j);
-            while (j>=0) {
-                if (!reWS.match(text.charAt(j))) break;
-                j--;
+            if (word == "import" && reWS.match(lastChar)) {
+                isTriggerChar = true;
+                displayClasses = true;
+            } else {
+                while (j>=0) {
+                    if (!reWS.match(text.charAt(j))) break;
+                    j--;
+                }
+                lastChar = text.charAt(j);
+                isDot = lastChar == '.';
+                isTriggerChar = (isDot || (lastChar == '{'));
+                if (isTriggerChar) char_pos = j + 1;
             }
-            lastChar = text.charAt(j);
-            isDot =  lastChar == '.';
-            isTriggerChar = (isDot || (lastChar == '{'));
-            if (isTriggerChar) char_pos = j + 1;
         }
 
         makeCall = isTriggerChar;
-        
+
         if (!makeCall) {
             var items = [];
             // metadata completion
-            if (isProbablyMeta && (text.charAt(char_pos-2)=="@")) {
+            if (doMetaCompletion) {
                 for (data in hxContext.client.metas) {
                     var ci = new Vscode.CompletionItem(data.name);
                     ci.documentation = data.doc;
@@ -154,32 +180,34 @@ class CompletionHandler implements CompletionItemProvider
             }
             return accept(items);
         }
-    
+
         var byte_pos = Tool.byte_pos(text, char_pos);
-        
+
         function make_request() {
             if (cancelToken.isCancellationRequested) {
                 reject([]);
                 return;
             }
-            
+
             var cl = client.cmdLine.save()
             .cwd(hxContext.workingDir)
             .define("display-details")
             .hxml(hxContext.buildFile)
-            .noOutput()
-            .display(path, byte_pos, displayMode);
-            
+            .noOutput();
+
+            if (displayClasses) cl.classes();
+            else cl.display(path, byte_pos, displayMode);
+
             client
             .setContext({fileName:path, line:(position.line+1), column:char_pos})
             .setCancelToken(cancelToken)
             ;
-            
+
             hxContext.send("completion@2", true, 1, 10).then(
               function(m) {
                   if (cancelToken.isCancellationRequested) reject([]);
                   else {
-                      var ret = parse_items(m); 
+                      var ret = parse_items(m);
                       if (ret.length==1 && ret[0]==null) {
                           ret = [];
                           hxContext.diagnoseIfAllowed();
@@ -198,10 +226,6 @@ class CompletionHandler implements CompletionItemProvider
           );
       }
 
-      // TODO: haxe completion server requires save before compute...
-      //       try temporary -cp?
-      //       See: https://github.com/HaxeFoundation/haxe/issues/4651
-      
       var ds = hxContext.getDocumentState(path);
       var isDirty = client.isPatchAvailable ? ds.isDirty() : ds.isDirty() || document.isDirty;
 
@@ -250,7 +274,7 @@ class CompletionHandler implements CompletionItemProvider
                       );
                   }
               });
-          }          
+          }
       }
       if (!client.isServerAvailable) {
           hxContext.launchServer().then(

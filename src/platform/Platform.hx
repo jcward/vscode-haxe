@@ -8,7 +8,7 @@ class Platform {
     public var executableExtension:String;
     public var isWin:Bool;
 
-    function new() {    
+    function new() {
     }
 
     public static function init(platformName:String) {
@@ -22,7 +22,7 @@ class Platform {
             instance.pathSeparator = "/";
             instance.reversePathSeparator = "\\";
             instance.executableExtension = "";
-            instance.isWin = false;            
+            instance.isWin = false;
         }
         return instance;
     }

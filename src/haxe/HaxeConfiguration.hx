@@ -18,11 +18,11 @@ typedef HaxeConfigurationObject = {
     ?haxelibExec:String // filled at runtime
 };
 
-class HaxeConfiguration {    
+class HaxeConfiguration {
     public static function addTrailingSep(path:String, platform:Platform) {
         if (path=="") return path;
         path = path.split(platform.reversePathSeparator).join(platform.pathSeparator);
-        if (path.charAt(path.length-1) != platform.pathSeparator) path += platform.pathSeparator; 
+        if (path.charAt(path.length-1) != platform.pathSeparator) path += platform.pathSeparator;
         return path;
     }
     public static function update(conf:HaxeConfigurationObject, platform:Platform) {

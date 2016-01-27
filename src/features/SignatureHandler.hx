@@ -51,7 +51,7 @@ class FunctionDecoder {
                     } else {
                         consLevel--;
                     }
-               
+
             }
             pc = c;
             i++;
@@ -68,17 +68,17 @@ class SignatureHandler implements SignatureHelpProvider
   public function new(hxContext:HaxeContext):Void
   {
       this.hxContext = hxContext;
-      
+
       var context = hxContext.context;
-            
+
       var disposable = Vscode.languages.registerSignatureHelpProvider(HaxeContext.languageID(), this, '(', ',');
       context.subscriptions.push(disposable);
   }
-  
+
   static var reType = ~/<type(\s+opar='(\d+)')?(\s+index='(\d+)')?>/;
   static var reGT = ~/&gt;/g;
   static var reLT = ~/&lt;/g;
-  
+
   public function provideSignatureHelp(document:TextDocument,
                                     position:Position,
                                     cancelToken:CancellationToken):Thenable<SignatureHelp>
@@ -89,13 +89,13 @@ class SignatureHandler implements SignatureHelpProvider
 
       var documentState = hxContext.getDocumentState(document.uri.fsPath);
       var path = documentState.path();
-           
+
       var text = document.getText();
-      var char_pos = document.offsetAt(position);          
+      var char_pos = document.offsetAt(position);
       var text = document.getText();
       var byte_pos = Tool.byte_pos(text, char_pos);
 
-      var displayMode = haxe.HaxeCmdLine.DisplayMode.Default; 
+      var displayMode = haxe.HaxeCmdLine.DisplayMode.Default;
 
       return new Thenable<SignatureHelp>(function(accept, reject) {
           if (cancelToken.isCancellationRequested) {
@@ -153,10 +153,10 @@ class SignatureHandler implements SignatureHelpProvider
                   }
             );
       }
-      
+
       var ds = hxContext.getDocumentState(path);
       var isDirty = client.isPatchAvailable ? ds.isDirty() : ds.isDirty() || document.isDirty;
-      
+
       function doRequest() {
           if (cancelToken.isCancellationRequested) {
               reject(null);
@@ -202,7 +202,7 @@ class SignatureHandler implements SignatureHelpProvider
                       );
                   }
               });
-          }          
+          }
       }
       if (!client.isServerAvailable) {
           hxContext.launchServer().then(

@@ -24,9 +24,9 @@ class DefinitionHandler implements DefinitionProvider
   public function new(hxContext:HaxeContext):Void
   {
       this.hxContext = hxContext;
-      
+
       var context = hxContext.context;
-            
+
       var disposable = Vscode.languages.registerDefinitionProvider(HaxeContext.languageID(), this);
       context.subscriptions.push(disposable);
   }
@@ -40,15 +40,15 @@ class DefinitionHandler implements DefinitionProvider
       var changeDebouncer = hxContext.changeDebouncer;
 
       var client = hxContext.client;
-      
+
       var documentState = hxContext.getDocumentState(document.uri.fsPath);
       var path = documentState.path();
       var displayMode = haxe.HaxeCmdLine.DisplayMode.Position;
-      
+
       var text = document.getText();
       var range = document.getWordRangeAtPosition(position);
       position = range.end;
-      
+
       var char_pos = document.offsetAt(position) + 1;
       var byte_pos = Tool.byte_pos(text, char_pos);
 
@@ -56,7 +56,7 @@ class DefinitionHandler implements DefinitionProvider
           if (cancelToken.isCancellationRequested) {
               reject(null);
           }
-          
+
           var trying = 1;
           function make_request() {
             var cl = client.cmdLine.save()
@@ -70,7 +70,7 @@ class DefinitionHandler implements DefinitionProvider
 
             function parse(m:Message) {
                 if (cancelToken.isCancellationRequested) return reject(null);
-                
+
                 var datas = m.stderr;
                 var defs = [];
                 if ((datas.length >= 2) && datas[0]=="<list>") {
@@ -113,7 +113,7 @@ class DefinitionHandler implements DefinitionProvider
                 }
             );
           }
- 
+
           var ds = hxContext.getDocumentState(path);
           var isDirty = client.isPatchAvailable ? ds.isDirty() : ds.isDirty() || document.isDirty;
 
@@ -162,7 +162,7 @@ class DefinitionHandler implements DefinitionProvider
                       );
                   }
               });
-          }          
+          }
       }
       if (!client.isServerAvailable) {
           hxContext.launchServer().then(

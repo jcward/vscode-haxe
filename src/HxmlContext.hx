@@ -15,35 +15,35 @@ using StringTools;
 
 class HxmlContext {
     public inline static function languageID() return "hxml";
-    
+
     public static inline function isHxmlDocument(document:TextDocument) return (document.languageId == languageID());
 
     public var hxContext(default, null):HaxeContext;
-    
+
     var haxelibCache:Map<String, Array<String>>;
-    
+
     public var context(get, null):ExtensionContext;
-    inline function get_context() return hxContext.context; 
+    inline function get_context() return hxContext.context;
 
     public var client(get, null):HaxeClient;
-    inline function get_client() return hxContext.client;     
-    
+    inline function get_client() return hxContext.client;
+
     var internalBuildLines:Array<String>;
-    
+
     var buildWatcher:Vscode.FileSystemWatcher;
-    
+
     public function new(hxContext:HaxeContext) {
         this.hxContext = hxContext;
         var disposable = Vscode.languages.registerHoverProvider(languageID(), {provideHover:onHover});
         context.subscriptions.push(disposable);
-        
+
         haxelibCache = new Map();
-        
+
         buildWatcher = Vscode.workspace.createFileSystemWatcher(hxContext.realBuildFileWithPath, true, false, true);
         buildWatcher.onDidChange(onBuildChange);
         makeInternalBuild();
-              
-        new features.hxml.CompletionHandler(this);   
+
+        new features.hxml.CompletionHandler(this);
         context.subscriptions.push(cast this);
     }
     function onBuildChange(e:Event<Uri>) {
@@ -72,7 +72,7 @@ class HxmlContext {
             return [];
         }
     }
-    
+
     function parseLines(lines:Array<String>) {
         var newLines = ['#automatically generated do not edit', '#@date ${Date.now()}'];
         newLines = _parseLines(lines, newLines);
@@ -111,35 +111,35 @@ class HxmlContext {
                         }
             }
         }
-        
+
         return acc;
     }
     function cacheLibData(libName, datas:Array<String>) {
         var d = haxelibCache.get(libName);
         if (d!=null) return datas.concat(d);
-        
+
         haxelibCache.set(libName, []);
-        
+
         var exec = hxContext.configuration.haxelibExec;
         var out = ChildProcess.spawnSync(
             exec,
-            ["path", libName], 
+            ["path", libName],
             {encoding:"utf8"});
-            
+
         if (out.pid==0) {
             'Cant find $exec'.displayAsError();
             return null;
         }
-        
+
         if (out.status == 1) {
             out.stdout.displayAsError();
             return null;
-        }        
-        
+        }
+
         var lines:Array<String> = (cast out.stdout).split("\n");
         lines = _parseLines(lines, datas, true);
         haxelibCache.set(libName, lines);
-        return lines;        
+        return lines;
     }
 
     static var reComment = ~/\s*#(.+)/;
@@ -148,7 +148,7 @@ class HxmlContext {
     static var reMain = ~/\s*(.+)/;
     static var reLibOption = ~/^\s*-lib\s+([^\s]+)(.*)/;
     static var reCpOption = ~/^\s*-cp\s+([^#]+)(.*)/;
-    
+
     function onHover(document:TextDocument, position:Position, cancelToken:CancellationToken):Hover {
         var sHover = "";
         var client = hxContext.client;

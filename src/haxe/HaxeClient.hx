@@ -107,9 +107,9 @@ class HaxeClient {
 
     var queue:Array<Job>;
     var working:Bool;
-    
+
     static var jobId:Int = 0;
-    
+
     public function new(host:String, port:Int) {
         this.host = host;
         this.port = port;
@@ -127,7 +127,7 @@ class HaxeClient {
         definesByName = new Map<String, Define>();
         isHaxeServer = false;
         isPatchAvailable = false;
-        isServerAvailable = false;        
+        isServerAvailable = false;
     }
   /*
     public function clone() {
@@ -154,31 +154,31 @@ class HaxeClient {
         cancelToken = ct;
         return this;
     }
-    
+
     var currentJob:Job = null;
-    
+
     public function sendAll(onClose:Message->Void, ?restoreCmdLine=false, ?id:String=null, ?priority=0, ?clearCmdAfterExec = true) {
         var ctx = sourceContext;
         var ct = cancelToken;
-        
+
         sourceContext = null;
         cancelToken = null;
-        
+
         var cmds = cmdLine.toString();
-        
+
         inline function restore() {
             if (restoreCmdLine) cmdLine.restore();
-            restoreCmdLine = false;            
+            restoreCmdLine = false;
         }
-        
+
         inline function closeWithCancel() {
             restore();
             if (onClose != null) onClose({stdout:null, stderr:null, infos:null, socket:null, error:null, severity:MessageSeverity.Cancel});
-            onClose = null;     
+            onClose = null;
             working = false;
-            currentJob = null;       
+            currentJob = null;
         }
-        
+
         if (cmds=="") {
             closeWithCancel();
             runQueue();
@@ -187,9 +187,9 @@ class HaxeClient {
 
         cmdLine.clearPatch();
         var workingDir = cmdLine.workingDir;
-        
+
         restore();
-        
+
         function run(job:Job) {
             currentJob = job;
 
@@ -198,10 +198,10 @@ class HaxeClient {
                 if (s !=null ) s.close();
                 closeWithCancel();
             }
-            var ct = job.cancelToken; 
-            
+            var ct = job.cancelToken;
+
             inline function isCancelled() return (job.cancel || (ct != null && ct.isCancellationRequested));
-            
+
             if (isCancelled()) {
                 cancel();
                 runQueue();
@@ -209,7 +209,7 @@ class HaxeClient {
             }
 
             working = true;
-    
+
             s = new Socket();
             s.connect(host, port,
                 function(s) {
@@ -233,7 +233,7 @@ class HaxeClient {
                     working = false;
                     isServerAvailable = (s.error == null);
                     if (clearCmdAfterExec) clear();
-                    
+
                     if (isCancelled()) {
                         cancel();
                         runQueue();
@@ -247,7 +247,7 @@ class HaxeClient {
 
                         var hasError = false;
                         var nl = "\n";
-        
+
                         for (line in s.datas.join("").split(nl)) {
                             switch (line.charCodeAt(0)) {
                                 case 0x01: stdout.push(line.substr(1).split("\x01").join(nl));
@@ -271,24 +271,24 @@ class HaxeClient {
         }
 
         if (id=="") id = null;
-        
+
         var group = 0;
-        
+
         if (id != null) {
             var tmp = id.split("@");
             id = tmp[0];
             if (id == "") id = null;
             if (tmp.length > 1) group = Std.parseInt(tmp[1]);
         }
-        
+
         jobId++;
 
         var sId = "-" + Std.string(jobId);
         if (id == null) id = sId;
-        else id += sId; 
-        
+        else id += sId;
+
         var job:Job = {run:run, id:id, group:group, priority:priority, cancelToken:ct, cancel:false};
-        
+
         if (queue.length == 0) queue.push(job);
         else {
             var oq = queue;
@@ -307,7 +307,7 @@ class HaxeClient {
                 } else {
                     queue.push(j);
                 }
-            }            
+            }
             queue = queue.concat(oq);
             if (!jobPushed) queue.push(job);
         }
@@ -334,7 +334,7 @@ class HaxeClient {
                         job = nj;
                     }
                 }
-                else queue.push(nj);               
+                else queue.push(nj);
             }
         }
         if (job != null) {
@@ -343,7 +343,7 @@ class HaxeClient {
     }
     public static function isOptionExists(optionName:String, data:String) {
         var re = new EReg("unknown option '"+optionName+"'", "");
- 
+
         return !re.match(data);
     }
     static var reVersion = ~/^Haxe\s+(.+?)(\d+).(\d+).(\d+)(.+)?/;

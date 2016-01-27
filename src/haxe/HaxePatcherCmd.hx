@@ -17,11 +17,11 @@ typedef PendingOP = {unit:PatcherUnit, op:PatcherEditOP, pos:Int, len:Int, ?cont
 
 class HaxePatcherCmd {
     public static inline function name() return "--patch";
-    
-    public var fileName(default, null):String; 
+
+    public var fileName(default, null):String;
     var actions:Array<String>;
     var pendingOP:Null<PendingOP>;
-   
+
     public function new(fileName:String) {
         this.fileName = fileName;
         actions = [];
@@ -42,7 +42,7 @@ class HaxePatcherCmd {
             case PatcherEditOP.Delete: '${pop.unit}${PatcherEditOP.Delete}${pop.pos}:${pop.len}\x01';
             case PatcherEditOP.Replace: '${pop.unit}${PatcherEditOP.Delete}0:-1\x01@${pop.unit}${PatcherEditOP.Insert}0:${pop.content}\x01';
         }
-    } 
+    }
     public function delete(pos:Int, len:Int, ?unit:PatcherUnit=null) {
         if (unit == null) unit = PatcherUnit.Byte;
         var op = PatcherEditOP.Delete;
@@ -63,7 +63,7 @@ class HaxePatcherCmd {
                 pendingOP = {unit:unit, op:op, pos:pos, len:len};
             }
         }
-        return this;        
+        return this;
     }
     public function insert(pos:Int, len:Int, text:String, ?unit:PatcherUnit=null) {
         if (unit == null) unit = PatcherUnit.Byte;
@@ -80,7 +80,7 @@ class HaxePatcherCmd {
                     pendingOP.content = text + pendingOP.content;
                 } else {
                     actions.push(opToString(pendingOP));
-                    pendingOP = {unit:unit, op:op, pos:pos, len:len, content:text};                    
+                    pendingOP = {unit:unit, op:op, pos:pos, len:len, content:text};
                 }
             }
             else {
@@ -88,7 +88,7 @@ class HaxePatcherCmd {
                 pendingOP = {unit:unit, op:op, pos:pos, len:len, content:text};
             }
         }
-        return this;        
+        return this;
     }
      public function replace(text:String) {
         var unit = PatcherUnit.Byte;
@@ -104,7 +104,7 @@ class HaxePatcherCmd {
                 pendingOP = {unit:unit, op:op, pos:0, len:-1, content:text};
             }
         }
-        return this;        
+        return this;
     }
     public function toString() {
         if (pendingOP != null) {
@@ -113,7 +113,7 @@ class HaxePatcherCmd {
         }
 
         if (actions.length==0) return "";
- 
+
         var tmp =  actions.join("@");
         var cmd = name() + ' $fileName@$tmp\n';
         return cmd;

@@ -73,6 +73,7 @@ var HaxeContext = function(context) {
 	this.configuration = Vscode.workspace.getConfiguration("haxe");
 	platform_Platform.init(process.platform);
 	haxe_HaxeConfiguration.update(this.configuration,platform_Platform.instance);
+	this.initBuildFile();
 	this.classPaths = [];
 	this.useInternalBuildFile = false;
 	this.useTmpDir = false;
@@ -84,8 +85,8 @@ var HaxeContext = function(context) {
 	context.subscriptions.push(this.diagnostics);
 	this.documentsState = new haxe_ds_StringMap();
 	this.pendingSaves = new haxe_ds_StringMap();
-	this.lastModification = 0;
-	this.lastDiagnostic = 0;
+	this.diagnosticStart = 0;
+	this.lastDiagnostic = 1;
 	this.checkForDiagnostic = false;
 	this.checkTimer = new haxe_Timer(50);
 	this.checkTimer.run = $bind(this,this.check);
@@ -101,17 +102,20 @@ HaxeContext.isDirty = function(ds) {
 HaxeContext.isSaving = function(ds) {
 	return ds.lastSave < ds.saveStartAt;
 };
+HaxeContext.isHaxeDocument = function(document) {
+	return document.languageId == "haxe";
+};
+HaxeContext.saveStarted = function(ds) {
+	ds.saveStartAt = new Date().getTime();
+};
 HaxeContext.saved = function(ds) {
 	ds.lastSave = new Date().getTime();
 };
-HaxeContext.dirty = function(ds) {
+HaxeContext.notSaved = function(ds) {
 	ds.lastSave = ds.lastModification - 1;
 };
 HaxeContext.modified = function(ds) {
 	ds.lastModification = new Date().getTime();
-};
-HaxeContext.isHaxeDocument = function(document) {
-	return document.languageId == "haxe";
 };
 HaxeContext.path = function(ds) {
 	if(ds.tmpPath == null) return ds.realPath; else return ds.tmpPath;
@@ -125,6 +129,10 @@ HaxeContext.prototype = {
 	}
 	,get_realBuildFile: function() {
 		return this.configuration.haxeDefaultBuildFile;
+	}
+	,set_realBuildFile: function(path) {
+		this.configuration.haxeDefaultBuildFile = path;
+		return path;
 	}
 	,get_internalBuildFile: function() {
 		return this.configuration.haxeVSCodeBuildFile;
@@ -141,8 +149,17 @@ HaxeContext.prototype = {
 	,get_internalBuildFileWithPath: function() {
 		return js_node_Path.join(this.get_workingDir(),this.configuration.haxeVSCodeBuildFile);
 	}
-	,canRunDiagnostic: function(ds) {
-		if(ds.diagnoseOnSave) return ds.lastSave >= this.lastDiagnostic; else return false;
+	,get_diagnosticRunning: function() {
+		return this.diagnosticStart > this.lastDiagnostic;
+	}
+	,diagnosticStarted: function() {
+		this.diagnosticStart = new Date().getTime();
+	}
+	,diagnosticEnded: function() {
+		this.lastDiagnostic = new Date().getTime();
+	}
+	,needDiagnostic: function(ds) {
+		return ds.lastSave > this.lastDiagnostic;
 	}
 	,tmpToReal: function(fileName) {
 		var nfile = Tool.normalize(fileName);
@@ -196,9 +213,26 @@ HaxeContext.prototype = {
 		}
 		return file;
 	}
-	,cancelDiagnostic: function() {
-		this.checkForDiagnostic = false;
-		this.lastDiagnostic = new Date().getTime();
+	,initBuildFile: function() {
+		var builds = [this.configuration.haxeDefaultBuildFile];
+		try {
+			var _g = 0;
+			while(_g < builds.length) {
+				var build = builds[_g];
+				++_g;
+				try {
+					js_node_Fs.accessSync(js_node_Path.join(this.projectDir,build),js_node_Fs.F_OK);
+					this.configuration.haxeDefaultBuildFile = build;
+					return;
+				} catch( e ) {
+				}
+			}
+			js_node_Fs.closeSync(js_node_Fs.openSync(this.get_realBuildFileWithPath(),"a"));
+		} catch( e1 ) {
+		}
+	}
+	,diagnoseIfAllowed: function() {
+		this.diagnose(1);
 	}
 	,getDirtyDocuments: function() {
 		var dd = [];
@@ -348,6 +382,7 @@ HaxeContext.prototype = {
 			if(document == null) reject2(ds);
 			if(_g.useTmpDir && ds.tmpPath != null) {
 				try {
+					ds.saveStartAt = new Date().getTime();
 					js_node_Fs.writeFile(ds.tmpPath,document.getText(),"utf8",function(e) {
 						if(e != null) reject2(ds); else {
 							_g.onSaveDocument(ds.document);
@@ -408,14 +443,13 @@ HaxeContext.prototype = {
 	,check: function() {
 		var _g2 = this;
 		var time = new Date().getTime();
-		if(this.checkForDiagnostic && this.configuration.haxeDiagnoseOnSave) {
+		if(this.checkForDiagnostic && this.diagnosticStart <= this.lastDiagnostic) {
 			var dlt = time - this.lastDiagnostic;
 			if(dlt >= this.configuration.haxeDiagnosticDelay) {
-				this.checkForDiagnostic = false;
 				if(this.client.isPatchAvailable) {
 					var dd = this.getDirtyDocuments();
 					var cnt = dd.length;
-					var doDiagnostic = false;
+					var needDiagnose = false;
 					var _g1 = 0;
 					var _g = dd.length;
 					while(_g1 < _g) {
@@ -423,24 +457,37 @@ HaxeContext.prototype = {
 						var ds = dd[i];
 						var document = ds.document;
 						cnt--;
-						doDiagnostic = doDiagnostic || this.canRunDiagnostic(ds);
+						needDiagnose = needDiagnose || ds.lastSave > this.lastDiagnostic;
 						this.diagnostics["delete"](document.uri);
 						this.patchFullDocument(ds).then(function(ds1) {
-							if(cnt == 0 && doDiagnostic) _g2.diagnose(1);
+							if(cnt == 0 && needDiagnose) _g2.diagnose(1);
 						});
 					}
 				} else {
-					var dd1 = this.getDirtyDocuments();
-					var cnt1 = dd1.length;
-					if(cnt1 == 0) return;
-					var _g3 = 0;
-					while(_g3 < cnt1) {
-						var i3 = _g3++;
-						var ds3 = dd1[i3];
-						ds3.diagnoseOnSave = i3 == cnt1 - 1;
-						if(ds3.lastSave < ds3.saveStartAt) continue;
-						this.diagnostics["delete"](ds3.document.uri);
-						this.saveFullDocument(ds3);
+					var isDirty = false;
+					var needDiagnose1 = false;
+					var $it0 = (function($this) {
+						var $r;
+						var _this = $this.documentsState;
+						$r = new haxe_ds__$StringMap_StringMapIterator(_this,_this.arrayKeys());
+						return $r;
+					}(this));
+					while( $it0.hasNext() ) {
+						var ds2 = $it0.next();
+						var document2 = ds2.document;
+						if(document2 == null) continue;
+						if(ds2.document != null && ds2.lastModification > ds2.lastSave) {
+							if(ds2.lastSave >= ds2.saveStartAt) {
+								isDirty = true;
+								ds2.diagnoseOnSave = false;
+								this.diagnostics["delete"](ds2.document.uri);
+								this.saveFullDocument(ds2);
+							}
+						} else needDiagnose1 = needDiagnose1 || ds2.lastSave > this.lastDiagnostic;
+					}
+					if(!isDirty) {
+						this.checkForDiagnostic = false;
+						if(needDiagnose1) this.diagnose(1);
 					}
 				}
 			}
@@ -553,7 +600,10 @@ HaxeContext.prototype = {
 		return null;
 	}
 	,applyDiagnostics: function(message) {
-		if(message.severity == 3) return;
+		if(message.severity == 3) {
+			this.lastDiagnostic = new Date().getTime();
+			return;
+		}
 		var all = new haxe_ds_StringMap();
 		var _g = 0;
 		var _g1 = message.infos;
@@ -576,6 +626,7 @@ HaxeContext.prototype = {
 			var fileName = tmp1.next();
 			var diags1 = __map_reserved[fileName] != null?all.getReserved(fileName):all.h[fileName];
 			fileName = this.tmpToReal(fileName);
+			console.log("fn:" + fileName);
 			var url = Vscode.Uri.file(fileName);
 			if(diags1 == null) {
 				this.diagnostics.set(url,[]);
@@ -595,7 +646,7 @@ HaxeContext.prototype = {
 			if(document != null) ds.document = document;
 			if(this.useTmpDir && ds.tmpPath == null) this.createTmpFile(ds);
 		} else {
-			ds = { realPath : path, saveStartAt : 0, lastSave : 0, lastModification : 0, document : document, diagnoseOnSave : true, tmpPath : null};
+			ds = { realPath : path, saveStartAt : 0, lastSave : new Date().getTime(), lastModification : 0, document : document, diagnoseOnSave : this.configuration.haxeDiagnoseOnSave, tmpPath : null};
 			var _this1 = this.documentsState;
 			if(__map_reserved[path] != null) _this1.setReserved(path,ds); else _this1.h[path] = ds;
 			var _this2 = this.documentsState;
@@ -632,6 +683,7 @@ HaxeContext.prototype = {
 				return;
 			}
 			_g.client.cmdLine.save().beginPatch(ds.tmpPath == null?ds.realPath:ds.tmpPath).replace(document.getText());
+			ds.saveStartAt = new Date().getTime();
 			_g.send(null,true,1).then(function(m) {
 				ds.lastSave = new Date().getTime();
 				accept(ds);
@@ -643,19 +695,13 @@ HaxeContext.prototype = {
 	,onSaveDocument: function(document) {
 		var ds = this.getDocumentState(document.uri.fsPath,document);
 		ds.lastSave = new Date().getTime();
-		if(this.configuration.haxeDiagnoseOnSave) {
-			if(ds.diagnoseOnSave) {
-				this.checkForDiagnostic = true;
-				this.removeAndDiagnoseDocument(document);
-			} else ds.diagnoseOnSave = true;
-		}
-	}
-	,diagnoseIfAllowed: function() {
-		if(this.configuration.haxeDiagnoseOnSave) this.diagnose(1);
+		if(ds.diagnoseOnSave) this.removeAndDiagnoseDocument(document);
+		ds.diagnoseOnSave = this.configuration.haxeDiagnoseOnSave;
 	}
 	,diagnose: function(retry) {
 		var _g = this;
-		this.client.cmdLine.save().cwd(this.get_workingDir()).hxml(this.get_buildFile()).noOutput();
+		this.diagnosticStart = new Date().getTime();
+		var cl = this.client.cmdLine.save().cwd(this.get_workingDir()).hxml(this.get_buildFile()).noOutput();
 		this.send("diagnostic@1",true,retry).then(function(m) {
 			_g.applyDiagnostics(m);
 		},function(m1) {
@@ -676,11 +722,44 @@ HaxeContext.prototype = {
 		var ds = this.getDocumentState(document.uri.fsPath,document);
 		ds.document = document;
 		ds.lastModification = new Date().getTime();
-		this.lastModification = ds.lastModification;
 		this.changeDebouncer.debounce(event);
 	}
 	,changePatchs: function(events) {
-		this.checkForDiagnostic = true;
+		if(events.length == 0) return;
+		if(!this.useTmpDir) {
+			var editor = Vscode.window.activeTextEditor;
+			var document = editor.document;
+			if(document.languageId != "haxe") return;
+			var changes = events[events.length - 1].contentChanges;
+			if(changes.length == 0) return;
+			var lastChange = changes[changes.length - 1];
+			var cursor = editor.selection.active;
+			var text = document.lineAt(cursor).text;
+			var char_pos = cursor.character - 1;
+			var len = text.length;
+			var insertText = lastChange.text;
+			var lastLen = insertText.length;
+			if(lastLen > 0) {
+				if(HaxeContext.reWS.match(insertText.charAt(lastLen - 1))) {
+					var ei = char_pos + 1;
+					while(ei < len) {
+						if(!HaxeContext.reWS.match(text.charAt(ei))) break;
+						++ei;
+					}
+					this.checkForDiagnostic = ei < len;
+				} else this.checkForDiagnostic = true;
+				return;
+			}
+			if(lastChange.rangeLength > 0) {
+				var ei1 = char_pos;
+				while(ei1 < len) {
+					if(!HaxeContext.reWS.match(text.charAt(ei1))) break;
+					++ei1;
+				}
+				this.checkForDiagnostic = ei1 < len;
+				return;
+			}
+		} else this.checkForDiagnostic = true;
 	}
 };
 var HxOverrides = function() { };
@@ -1134,16 +1213,24 @@ features_CompletionHandler.prototype = {
 			var client = _g.hxContext.client;
 			var text = document.getText();
 			var char_pos = document.offsetAt(position);
-			var documentState = _g.hxContext.getDocumentState(document.uri.fsPath);
-			var path = documentState.tmpPath == null?documentState.realPath:documentState.tmpPath;
+			var ds = _g.hxContext.getDocumentState(document.uri.fsPath);
+			var path = ds.tmpPath == null?ds.realPath:ds.tmpPath;
 			var makeCall = false;
 			var displayMode = haxe_DisplayMode.Default;
 			var lastChar = text.charAt(char_pos - 1);
 			var isDot = lastChar == ".";
 			var isProbablyMeta = lastChar == ":";
 			var doMetaCompletion = isProbablyMeta && text.charAt(char_pos - 2) == "@";
+			var word = "";
 			var displayClasses = isProbablyMeta && !doMetaCompletion;
 			var isTriggerChar = isDot || lastChar == "{" || displayClasses;
+			if(features_CompletionHandler.reWS.match(lastChar)) {
+				console.log(new Date().getTime() - ds.lastModification);
+				if(new Date().getTime() - ds.lastModification < 250) {
+					reject([]);
+					return;
+				}
+			}
 			if(!displayClasses && !doMetaCompletion && !isTriggerChar) {
 				var j = char_pos - 2;
 				if(features_CompletionHandler.reWS.match(lastChar)) {
@@ -1175,11 +1262,11 @@ features_CompletionHandler.prototype = {
 			if(!makeCall) {
 				var items = [];
 				if(doMetaCompletion) {
-					var _g13 = 0;
-					var _g23 = _g.hxContext.client.metas;
-					while(_g13 < _g23.length) {
-						var data = _g23[_g13];
-						++_g13;
+					var _g14 = 0;
+					var _g24 = _g.hxContext.client.metas;
+					while(_g14 < _g24.length) {
+						var data = _g24[_g14];
+						++_g14;
 						var ci = new Vscode.CompletionItem(data.name);
 						ci.documentation = data.doc;
 						items.push(ci);
@@ -1213,17 +1300,19 @@ features_CompletionHandler.prototype = {
 					reject([]);
 				});
 			};
-			var ds = _g.hxContext.getDocumentState(path);
-			var isDirty = client.isPatchAvailable?ds.document != null && ds.lastModification > ds.lastSave:ds.document != null && ds.lastModification > ds.lastSave || document.isDirty;
+			var ds1 = _g.hxContext.getDocumentState(path);
+			var isDirty = client.isPatchAvailable?ds1.document != null && ds1.lastModification > ds1.lastSave:ds1.document != null && ds1.lastModification > ds1.lastSave || document.isDirty;
 			var doRequest = function() {
 				if(cancelToken.isCancellationRequested) {
 					reject([]);
 					return;
 				}
-				if(client.isPatchAvailable) {
-					if(isDirty) _g.hxContext.patchFullDocument(ds).then(function(ds1) {
+				var isPatchAvailable = client.isPatchAvailable;
+				var isServerAvailable = client.isServerAvailable;
+				if(isPatchAvailable) {
+					if(isDirty) _g.hxContext.patchFullDocument(ds1).then(function(ds2) {
 						make_request();
-					},function(ds2) {
+					},function(ds3) {
 						reject([]);
 					}); else make_request();
 				} else changeDebouncer.whenDone(function() {
@@ -1235,10 +1324,10 @@ features_CompletionHandler.prototype = {
 					var _g1 = 0;
 					var _g2 = _g.hxContext.getDirtyDocuments();
 					while(_g1 < _g2.length) {
-						var ds3 = _g2[_g1];
+						var ds4 = _g2[_g1];
 						++_g1;
-						ds3.diagnoseOnSave = false;
-						ps.push(_g.hxContext.saveDocument(ds3));
+						ds4.diagnoseOnSave = false;
+						ps.push(_g.hxContext.saveDocument(ds4));
 					}
 					if(ps.length == 0) make_request(); else Promise.all(ps).then(function(all) {
 						if(cancelToken.isCancellationRequested) {
@@ -1246,14 +1335,14 @@ features_CompletionHandler.prototype = {
 							return;
 						}
 						make_request();
-					},function(all3) {
+					},function(all4) {
 						reject([]);
 					});
 				});
 			};
 			if(!client.isServerAvailable) _g.hxContext.launchServer().then(function(port) {
 				doRequest();
-			},function(port3) {
+			},function(port4) {
 				reject([]);
 			}); else doRequest();
 		});
@@ -2528,6 +2617,7 @@ String.__name__ = true;
 Array.__name__ = true;
 Date.__name__ = ["Date"];
 var __map_reserved = {}
+HaxeContext.reWS = new EReg("[\\s\t\r\n]","");
 HxmlContext.reComment = new EReg("\\s*#(.+)","");
 HxmlContext.reCheckOption = new EReg("^\\s*(-(-)?)([^\\s]+)(\\s+(.*))?","");
 HxmlContext.reDefineParam = new EReg("([^=]+)(=(.+))?","");

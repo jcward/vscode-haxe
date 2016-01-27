@@ -13,7 +13,7 @@ class Tool {
     public static inline function displayAsInfo(s:String) Vscode.window.showInformationMessage(s);
     public static inline function displayAsError(s:String) Vscode.window.showErrorMessage(s);
     public static inline function displayAsWarning(s:String) Vscode.window.showWarningMessage(s);
-    inline public static function getTime() return Date.now().getTime();    
+    inline public static function getTime() return Date.now().getTime();
 #if js
     public static function mkDirSync(path:String) {
         try {
@@ -25,9 +25,9 @@ class Tool {
     public static function mkDirsSync(dirs:Array<String>) {
         var path = "";
         for (dir in dirs) {
-            path = Path.join(path, dir);            
+            path = Path.join(path, dir);
             mkDirSync(path);
-        }       
+        }
     }
     public static function normalize(path:String) {
         path = Path.normalize(path);
@@ -37,7 +37,7 @@ class Tool {
     public static inline function byteLength(str:String) return
     #if (haxe_ver >= 3.3)
         Buffer.byteLength(str);
-    #else 
+    #else
         Buffer._byteLength(str);
     #end
     public static inline function byte_pos(text:String, char_pos:Int) return {

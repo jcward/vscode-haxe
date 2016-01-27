@@ -1,7 +1,7 @@
 {
 	"name": "haxe",
 	"description": "Haxe Language Extension",
-	"version": "0.0.3",
+	"version": "0.0.5",
 	"publisher": "Jeff Ward & Dan Korostelev & Patrick Le Clec'h",
 	"engines": {
 		"vscode": "^0.10.1"
@@ -12,7 +12,8 @@
 	"activationEvents": [
 		"onLanguage:haxe",
         "onLanguage:hxml",
-        "workspaceContains:build.hxml"
+        "workspaceContains:build.hxml",
+        "workspaceContains:project.hxml"
 	],
 	"main": "./haxe.js",
 	"contributes": {
@@ -21,7 +22,7 @@
 				"command": "haxe.hello",
 				"title": "Hello from Haxe!"
 			}
-		],	
+		],
 		"languages": [
 			{
 				"id": "haxe",
@@ -97,7 +98,7 @@
                 "type": "boolean",
                 "default": true,
                 "description": "If true the -lib will be cached into internal build file. It will be refreshed when real hxml file change"
-                },                
+                },
                 "haxe.haxeVSCodeBuildFile": {
                 "type": "string",
                 "default": "vscode-project.hxml",
