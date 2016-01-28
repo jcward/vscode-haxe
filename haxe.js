@@ -847,8 +847,30 @@ HxmlContext.prototype = {
 	,parseLines: function(lines) {
 		var newLines = ["#automatically generated do not edit","#@date " + Std.string(new Date())];
 		newLines = this._parseLines(lines,newLines);
-		if(this.hxContext.useTmpDir) newLines.push("-cp " + this.hxContext.tmpProjectDir);
-		return newLines;
+		if(this.hxContext.useTmpDir && newLines != null) {
+			var hasEach = false;
+			var hasNext = false;
+			lines = [];
+			var _g = 0;
+			while(_g < newLines.length) {
+				var line = newLines[_g];
+				++_g;
+				if(HxmlContext.reEach.match(line)) {
+					hasEach = true;
+					lines.push(line);
+				} else if(!hasNext && HxmlContext.reNext.match(line)) {
+					hasNext = true;
+					if(!hasEach) lines.push("--each");
+					lines.push("-cp " + this.hxContext.tmpProjectDir);
+					lines.push("");
+					lines.push(line);
+				} else lines.push(line);
+			}
+			if(hasEach) {
+				if(!hasNext) lines.push("-cp " + this.hxContext.tmpProjectDir);
+			} else lines.push("-cp " + this.hxContext.tmpProjectDir);
+		}
+		return lines;
 	}
 	,_parseLines: function(lines,acc,isLib) {
 		if(isLib == null) isLib = false;
@@ -2662,6 +2684,8 @@ HxmlContext.reDefineParam = new EReg("([^=]+)(=(.+))?","");
 HxmlContext.reMain = new EReg("\\s*(.+)","");
 HxmlContext.reLibOption = new EReg("^\\s*-lib\\s+([^\\s]+)(.*)","");
 HxmlContext.reCpOption = new EReg("^\\s*-cp\\s+([^#]+)(.*)","");
+HxmlContext.reEach = new EReg("^\\s*--each(.*)","");
+HxmlContext.reNext = new EReg("^\\s*--next(.*)","");
 features_CompletionHandler.reI = new EReg("<i n=\"([^\"]+)\" k=\"([^\"]+)\"( ip=\"([0-1])\")?( f=\"(\\d+)\")?><t>([^<]*)</t><d>([^<]*)</d></i>","");
 features_CompletionHandler.reGT = new EReg("&gt;","g");
 features_CompletionHandler.reLT = new EReg("&lt;","g");

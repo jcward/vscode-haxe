@@ -76,8 +76,29 @@ class HxmlContext {
     function parseLines(lines:Array<String>) {
         var newLines = ['#automatically generated do not edit', '#@date ${Date.now()}'];
         newLines = _parseLines(lines, newLines);
-        if (hxContext.useTmpDir) newLines.push('-cp ${hxContext.tmpProjectDir}');
-        return newLines;
+        if (hxContext.useTmpDir && newLines != null) {
+            var hasEach = false;
+            var hasNext = false;
+            lines = [];
+            for (line in newLines) {
+                if (reEach.match(line)) {
+                    hasEach = true;
+                    lines.push(line);
+                } else if (!hasNext && reNext.match(line)) {
+                    hasNext = true;
+                    if (!hasEach) lines.push("--each");
+                    lines.push('-cp ${hxContext.tmpProjectDir}');
+                    lines.push("");
+                    lines.push(line);
+                } else {
+                    lines.push(line);
+                }
+            }
+            if (hasEach) {
+                if (!hasNext) lines.push('-cp ${hxContext.tmpProjectDir}');
+            } else lines.push('-cp ${hxContext.tmpProjectDir}');
+        }
+        return lines;
     }
     function _parseLines(lines:Array<String>, ?acc:Null<Array<String>>=null, ?isLib=false) {
         if (acc == null) acc = [];
@@ -148,6 +169,8 @@ class HxmlContext {
     static var reMain = ~/\s*(.+)/;
     static var reLibOption = ~/^\s*-lib\s+([^\s]+)(.*)/;
     static var reCpOption = ~/^\s*-cp\s+([^#]+)(.*)/;
+    static var reEach = ~/^\s*--each(.*)/;
+    static var reNext = ~/^\s*--next(.*)/;
 
     function onHover(document:TextDocument, position:Position, cancelToken:CancellationToken):Hover {
         var sHover = "";
