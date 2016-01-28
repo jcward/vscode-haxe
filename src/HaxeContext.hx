@@ -86,7 +86,10 @@ class HaxeContext  {
 
     public var useInternalBuildFile:Bool;
 
+    public var classPathsByLength(default, null):Array<String>;
     public var classPaths(default, null):Array<String>;
+    public var classPathsReverse(default, null):Array<String>;
+
 
     var haxeProcess:Null<js.node.child_process.ChildProcess>;
 
@@ -122,7 +125,7 @@ class HaxeContext  {
 
     public function getPackageFromString(path:String) return {
         var npath = path.toLowerCase();
-        for (cp in classPaths) {
+        for (cp in classPathsByLength) {
             var tmp = npath.split(cp);
             if (tmp.length > 1) {
                 tmp.shift();
@@ -145,6 +148,17 @@ class HaxeContext  {
         if (platform.Platform.instance.isWin) {
             tmp = insensitiveToSensitiveMap.get(nfile);
             if (tmp != null) return tmp;
+        }
+        if (useTmpDir) {
+            var dirs = fileName.split(tmpProjectDir);
+            if (dirs.length == 2) {
+                var file = dirs.pop();
+                var cp = resolveFile(file);
+                if (cp != null) {
+                    fileName = insensitiveToSensitive(Path.join(cp, file));
+                    tmpToRealMap.set(nfile, fileName);
+                }
+            }
         }
         return fileName;
     }
@@ -204,7 +218,10 @@ class HaxeContext  {
 
         initBuildFile();
 
+        classPathsByLength = [];
         classPaths = [];
+        classPathsReverse = [];
+
         useInternalBuildFile = false;
         useTmpDir = false;
         projectDir = Vscode.workspace.rootPath;
@@ -266,18 +283,34 @@ class HaxeContext  {
 
         }
     }
+    public function resolveFile(file:String) {
+        for (cp in classPathsReverse) {
+            var fn = Path.join(cp, file);
+            try {
+                Fs.accessSync(fn, Fs.F_OK);
+                return cp;
+            } catch (e:Dynamic){}
+        }
+        return null;
+    }
     public function addClassPath(cp:String) {
         if (!Path.isAbsolute(cp)) cp = Path.join(realWorkingDir, cp);
         cp = (cp + Path.sep).normalize();
         classPaths.push(cp);
-        classPaths.sort(function(a, b) {
+        classPathsByLength = classPaths.concat([]);
+        classPathsReverse = classPaths.concat([]);
+        classPathsByLength.sort(function(a, b) {
             return b.length-a.length;
         });
+        classPathsReverse.reverse();
         return cp;
     }
 
     public function clearClassPaths() {
+        classPathsByLength = [];
         classPaths = [];
+        classPathsReverse = [];
+
         addClassPath(".");
     }
 

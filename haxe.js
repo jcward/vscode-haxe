@@ -74,7 +74,9 @@ var HaxeContext = function(context) {
 	platform_Platform.init(process.platform);
 	haxe_HaxeConfiguration.update(this.configuration,platform_Platform.instance);
 	this.initBuildFile();
+	this.classPathsByLength = [];
 	this.classPaths = [];
+	this.classPathsReverse = [];
 	this.useInternalBuildFile = false;
 	this.useTmpDir = false;
 	this.projectDir = Vscode.workspace.rootPath;
@@ -164,7 +166,7 @@ HaxeContext.prototype = {
 	,getPackageFromString: function(path) {
 		var npath = path.toLowerCase();
 		var _g = 0;
-		var _g1 = this.classPaths;
+		var _g1 = this.classPathsByLength;
 		while(_g < _g1.length) {
 			var cp = _g1[_g];
 			++_g;
@@ -195,6 +197,18 @@ HaxeContext.prototype = {
 			if(__map_reserved[nfile] != null) tmp2 = _this2.getReserved(nfile); else tmp2 = _this2.h[nfile];
 			tmp1 = tmp2;
 			if(tmp1 != null) return tmp1;
+		}
+		if(this.useTmpDir) {
+			var dirs = fileName.split(this.tmpProjectDir);
+			if(dirs.length == 2) {
+				var file = dirs.pop();
+				var cp = this.resolveFile(file);
+				if(cp != null) {
+					fileName = this.insensitiveToSensitive(js_node_Path.join(cp,file));
+					var _this3 = this.tmpToRealMap;
+					if(__map_reserved[nfile] != null) _this3.setReserved(nfile,fileName); else _this3.h[nfile] = fileName;
+				}
+			}
 		}
 		return fileName;
 	}
@@ -294,17 +308,36 @@ HaxeContext.prototype = {
 			}
 		}
 	}
+	,resolveFile: function(file) {
+		var _g = 0;
+		var _g1 = this.classPathsReverse;
+		while(_g < _g1.length) {
+			var cp = _g1[_g];
+			++_g;
+			try {
+				js_node_Fs.accessSync(js_node_Path.join(cp,file),js_node_Fs.F_OK);
+				return cp;
+			} catch( e ) {
+			}
+		}
+		return null;
+	}
 	,addClassPath: function(cp) {
 		if(!js_node_Path.isAbsolute(cp)) cp = js_node_Path.join(this.projectDir,cp);
 		cp = Tool.normalize(cp + js_node_Path.sep);
 		this.classPaths.push(cp);
-		this.classPaths.sort(function(a,b) {
+		this.classPathsByLength = this.classPaths.concat([]);
+		this.classPathsReverse = this.classPaths.concat([]);
+		this.classPathsByLength.sort(function(a,b) {
 			return b.length - a.length;
 		});
+		this.classPathsReverse.reverse();
 		return cp;
 	}
 	,clearClassPaths: function() {
+		this.classPathsByLength = [];
 		this.classPaths = [];
+		this.classPathsReverse = [];
 		this.addClassPath(".");
 	}
 	,resetDirtyDocuments: function() {
