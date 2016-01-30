@@ -111,6 +111,8 @@ class HaxeContext  {
 
     public var documentsState(default, null):Map<String, DocumentState>;
 
+    var lastDSEdited:Null<DocumentState>;
+
     public static inline function isDirty(ds:DocumentState) return (ds.document != null) && (ds.lastModification > ds.lastSave);
     public static inline function isSaving(ds:DocumentState) return (ds.lastSave < ds.saveStartAt);
     public static inline function isHaxeDocument(document:TextDocument) return (document.languageId == languageID());
@@ -629,6 +631,8 @@ class HaxeContext  {
             return;
         }
 
+        diagnostics.clear();
+
         var all = new Map<String, Null<Array<Diagnostic>>>();
 
         for (info in message.infos) {
@@ -721,6 +725,11 @@ class HaxeContext  {
         .noOutput()
         ;
 
+        if ((lastDSEdited != null) && needDiagnostic(lastDSEdited)) {
+            var tmp = getPackageFromDS(lastDSEdited);
+            if (tmp!=null) cl.custom("", tmp.fileAndPath);
+        }
+
         send("diagnostic@1", true, retry).then(
             function(m:Message){applyDiagnostics(m);},
             function(m:Message){
@@ -750,6 +759,8 @@ class HaxeContext  {
 
         ds.document = document;
         ds.modified();
+
+        lastDSEdited = ds;
 
         changeDebouncer.debounce(event);
     }
@@ -922,6 +933,7 @@ class HaxeContext  {
         var ds = getDocumentState(path, document);
         if (event.contentChanges.length==0) return;
         ds.dirty();
+        lastDSEdited = ds;
         changeDebouncer.debounce(event);
     }
 #end

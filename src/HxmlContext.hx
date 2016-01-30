@@ -83,20 +83,21 @@ class HxmlContext {
             for (line in newLines) {
                 if (reEach.match(line)) {
                     hasEach = true;
+                    lines.push('-cp ${hxContext.tmpProjectDir}');
                     lines.push(line);
                 } else if (!hasNext && reNext.match(line)) {
                     hasNext = true;
-                    if (!hasEach) lines.push("--each");
-                    lines.push('-cp ${hxContext.tmpProjectDir}');
+                    if (!hasEach) {
+                        lines.push('-cp ${hxContext.tmpProjectDir}');
+                        lines.push("--each");
+                    }
                     lines.push("");
                     lines.push(line);
                 } else {
                     lines.push(line);
                 }
             }
-            if (hasEach) {
-                if (!hasNext) lines.push('-cp ${hxContext.tmpProjectDir}');
-            } else lines.push('-cp ${hxContext.tmpProjectDir}');
+            if (!hasEach && !hasNext) lines.push('-cp ${hxContext.tmpProjectDir}');
         }
         return lines;
     }

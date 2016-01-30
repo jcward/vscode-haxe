@@ -644,6 +644,7 @@ HaxeContext.prototype = {
 			this.lastDiagnostic = new Date().getTime();
 			return;
 		}
+		this.diagnostics.clear();
 		var all = new haxe_ds_StringMap();
 		var _g = 0;
 		var _g1 = message.infos;
@@ -741,6 +742,10 @@ HaxeContext.prototype = {
 		var _g = this;
 		this.diagnosticStart = new Date().getTime();
 		var cl = this.client.cmdLine.save().cwd(this.get_workingDir()).hxml(this.get_buildFile()).noOutput();
+		if(this.lastDSEdited != null && this.lastDSEdited.lastSave > this.lastDiagnostic) {
+			var tmp = this.getPackageFromDS(this.lastDSEdited);
+			if(tmp != null) cl.custom("",tmp.fileAndPath);
+		}
 		this.send("diagnostic@1",true,retry).then(function(m) {
 			_g.applyDiagnostics(m);
 		},function(m1) {
@@ -761,6 +766,7 @@ HaxeContext.prototype = {
 		var ds = this.getDocumentState(document.uri.fsPath,document);
 		ds.document = document;
 		ds.lastModification = new Date().getTime();
+		this.lastDSEdited = ds;
 		this.changeDebouncer.debounce(event);
 	}
 	,changePatchs: function(events) {
@@ -890,18 +896,19 @@ HxmlContext.prototype = {
 				++_g;
 				if(HxmlContext.reEach.match(line)) {
 					hasEach = true;
+					lines.push("-cp " + this.hxContext.tmpProjectDir);
 					lines.push(line);
 				} else if(!hasNext && HxmlContext.reNext.match(line)) {
 					hasNext = true;
-					if(!hasEach) lines.push("--each");
-					lines.push("-cp " + this.hxContext.tmpProjectDir);
+					if(!hasEach) {
+						lines.push("-cp " + this.hxContext.tmpProjectDir);
+						lines.push("--each");
+					}
 					lines.push("");
 					lines.push(line);
 				} else lines.push(line);
 			}
-			if(hasEach) {
-				if(!hasNext) lines.push("-cp " + this.hxContext.tmpProjectDir);
-			} else lines.push("-cp " + this.hxContext.tmpProjectDir);
+			if(!hasEach && !hasNext) lines.push("-cp " + this.hxContext.tmpProjectDir);
 		}
 		return lines;
 	}
