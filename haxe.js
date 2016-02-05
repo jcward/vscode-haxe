@@ -83,6 +83,7 @@ var HaxeContext = function(context) {
 	this.tmpToRealMap = new haxe_ds_StringMap();
 	this.insensitiveToSensitiveMap = new haxe_ds_StringMap();
 	this.initTmpDir();
+	this.createToolFile();
 	this.diagnostics = Vscode.languages.createDiagnosticCollection("haxe");
 	context.subscriptions.push(this.diagnostics);
 	this.documentsState = new haxe_ds_StringMap();
@@ -297,7 +298,8 @@ HaxeContext.prototype = {
 					}
 				}
 				try {
-					js_node_Fs.writeFileSync(tmpFile,ds.document.getText(),"utf8");
+					js_node_Fs.writeFileSync(tmpFile,ds.text == null?ds.document.getText():ds.text,"utf8");
+					ds.text = null;
 					ds.tmpPath = tmpFile;
 					var key = Tool.normalize(tmpFile);
 					var _this = this.tmpToRealMap;
@@ -423,7 +425,8 @@ HaxeContext.prototype = {
 			if(_g.useTmpDir && ds.tmpPath != null) {
 				try {
 					ds.saveStartAt = new Date().getTime();
-					js_node_Fs.writeFile(ds.tmpPath,document.getText(),"utf8",function(e) {
+					js_node_Fs.writeFile(ds.tmpPath,ds.text == null?ds.document.getText():ds.text,"utf8",function(e) {
+						ds.text = null;
 						if(e != null) reject2(ds); else {
 							_g.onSaveDocument(ds.document);
 							accept2(ds);
@@ -562,6 +565,12 @@ HaxeContext.prototype = {
 		this.useTmpDir = false;
 		this.tmpProjectDir = null;
 	}
+	,createToolFile: function() {
+		if(this.useTmpDir) js_node_Fs.writeFileSync(js_node_Path.join(this.tmpProjectDir,"VSCTool.hx"),"package;\r\nimport haxe.macro.Context;\r\nclass VSCTool {\r\n    macro public static function fatalError(){\r\n        Context.fatalError('@fatalError', Context.currentPos());\r\n        return macro null;\r\n    }\r\n}","utf8");
+	}
+	,removeToolFile: function() {
+		if(this.useTmpDir) js_node_Fs.unlinkSync(js_node_Path.join(this.tmpProjectDir,"VSCTool.hx"));
+	}
 	,launchServer: function() {
 		var _g = this;
 		var host = this.configuration.haxeServerHost;
@@ -637,6 +646,7 @@ HaxeContext.prototype = {
 			this.haxeProcess = null;
 		}
 		this.client = null;
+		this.removeToolFile();
 		return null;
 	}
 	,applyDiagnostics: function(message) {
@@ -686,11 +696,13 @@ HaxeContext.prototype = {
 			if(document != null) ds.document = document;
 			if(this.useTmpDir && ds.tmpPath == null) this.createTmpFile(ds);
 		} else {
-			ds = { realPath : path, saveStartAt : 0, lastSave : new Date().getTime(), lastModification : 0, document : document, diagnoseOnSave : this.configuration.haxeDiagnoseOnSave, tmpPath : null};
+			ds = { realPath : path, saveStartAt : 0, lastSave : new Date().getTime(), lastModification : 0, document : document, diagnoseOnSave : this.configuration.haxeDiagnoseOnSave, tmpPath : null, text : null};
 			var _this1 = this.documentsState;
 			if(__map_reserved[path] != null) _this1.setReserved(path,ds); else _this1.h[path] = ds;
-			var _this2 = this.documentsState;
-			if(__map_reserved[npath] != null) _this2.setReserved(npath,ds); else _this2.h[npath] = ds;
+			if(npath != path) {
+				var _this2 = this.documentsState;
+				if(__map_reserved[npath] != null) _this2.setReserved(npath,ds); else _this2.h[npath] = ds;
+			}
 			this.createTmpFile(ds);
 		}
 		return ds;
@@ -1597,6 +1609,64 @@ features_FunctionDecoder.asFunctionArgs = function(data) {
 	args.push({ name : "", type : HxOverrides.substr(data,sp,null)});
 	return args;
 };
+features_FunctionDecoder.findNameAndParameterPlace = function(data,from) {
+	var argCount = 0;
+	var parLevel = 0;
+	var bkLevel = 0;
+	var inStr = false;
+	try {
+		while(from >= 0) {
+			var c = data.charAt(from--);
+			if(inStr) {
+				var slCnt = 0;
+				var i = from;
+				while(i >= 0) {
+					if(data.charAt(i) == "\\") ++slCnt; else break;
+					--i;
+				}
+				if((slCnt & 1) == 0) inStr = false; else from = i;
+			} else switch(c) {
+			case "(":
+				++parLevel;
+				if(parLevel == 1) {
+					var pp = from + 1;
+					while(from >= 0) {
+						c = data.charAt(from);
+						if(!features_FunctionDecoder.reWS.match(c)) break;
+						--from;
+					}
+					if(from < 0) throw "__break__";
+					if(!features_FunctionDecoder.reLastId.match(c)) throw "__break__";
+					--from;
+					while(from >= 0) {
+						c = data.charAt(from);
+						if(!features_FunctionDecoder.reLastId.match(c)) break;
+						--from;
+					}
+					if(features_FunctionDecoder.reFirstId.match(data.charAt(from + 1))) return { start : pp + 1, cnt : argCount};
+				}
+				break;
+			case "[":
+				++bkLevel;
+				if(bkLevel != 0) throw "__break__";
+				break;
+			case ")":
+				--parLevel;
+				break;
+			case "]":
+				--bkLevel;
+				break;
+			case ",":
+				if(bkLevel == 0 && parLevel == 0) ++argCount;
+				break;
+			case "'":case "\"":
+				inStr = true;
+				break;
+			}
+		}
+	} catch( e ) { if( e != "__break__" ) throw e; }
+	return null;
+};
 var features_SignatureHandler = function(hxContext) {
 	this.hxContext = hxContext;
 	hxContext.context.subscriptions.push(Vscode.languages.registerSignatureHelpProvider("haxe",this,"(",","));
@@ -1608,36 +1678,46 @@ features_SignatureHandler.prototype = {
 		var _g = this;
 		var client = this.hxContext.client;
 		var changeDebouncer = this.hxContext.changeDebouncer;
-		var documentState = this.hxContext.getDocumentState(document.uri.fsPath);
-		var path = documentState.tmpPath == null?documentState.realPath:documentState.tmpPath;
-		document.getText();
-		var char_pos = document.offsetAt(position);
+		var ds = this.hxContext.getDocumentState(document.uri.fsPath,document);
+		var path = ds.tmpPath == null?ds.realPath:ds.tmpPath;
 		var text = document.getText();
-		var byte_pos = char_pos == text.length?js_node_buffer_Buffer.byteLength(text):js_node_buffer_Buffer.byteLength(HxOverrides.substr(text,0,char_pos));
+		var char_pos = document.offsetAt(position);
+		var text1 = document.getText();
+		var lastChar = text1.charAt(char_pos - 1);
+		var byte_pos = 0;
 		var displayMode = haxe_DisplayMode.Default;
+		var activeParameter = 0;
+		if(lastChar == ",") {
+			ds.text = HxOverrides.substr(text1,0,char_pos) + "VSCTool.fatalError()." + HxOverrides.substr(text1,char_pos,null);
+			ds.lastModification = new Date().getTime();
+			var char_pos1 = char_pos + 21;
+			if(char_pos1 == text1.length) byte_pos = js_node_buffer_Buffer.byteLength(text1); else byte_pos = js_node_buffer_Buffer.byteLength(HxOverrides.substr(text1,0,char_pos1));
+		} else if(char_pos == text1.length) byte_pos = js_node_buffer_Buffer.byteLength(text1); else byte_pos = js_node_buffer_Buffer.byteLength(HxOverrides.substr(text1,0,char_pos));
 		return new Promise(function(accept,reject) {
 			if(cancelToken.isCancellationRequested) reject(null);
-			var make_request = function() {
-				client.cmdLine.save().cwd(_g.hxContext.get_workingDir()).hxml(_g.hxContext.get_buildFile()).noOutput().display(path,byte_pos,displayMode);
+			var make_request = null;
+			make_request = function() {
+				var cl = client.cmdLine.save().cwd(_g.hxContext.get_workingDir()).hxml(_g.hxContext.get_buildFile()).noOutput().display(path,byte_pos,displayMode);
 				client.setContext({ fileName : path, line : position.line + 1, column : char_pos}).setCancelToken(cancelToken);
 				_g.hxContext.send(null,true,1).then(function(m) {
+					_g.hxContext.diagnostics.clear();
 					var datas = m.stderr;
 					var sh = new Vscode.SignatureHelp();
-					sh.activeParameter = 0;
+					sh.activeParameter = activeParameter;
 					sh.activeSignature = 0;
 					var sigs = [];
 					sh.signatures = sigs;
 					if(datas.length > 2 && features_SignatureHandler.reType.match(datas[0])) {
-						Std.parseInt(features_SignatureHandler.reType.matched(2));
+						var opar = Std.parseInt(features_SignatureHandler.reType.matched(2)) | 0;
 						var index = Std.parseInt(features_SignatureHandler.reType.matched(4)) | 0;
-						if(index >= 0) sh.activeParameter = index;
+						if(index > 0) sh.activeParameter = index;
 						datas.shift();
 						datas.pop();
 						datas.pop();
-						var _g1 = 0;
-						while(_g1 < datas.length) {
-							var data = datas[_g1];
-							++_g1;
+						var _g14 = 0;
+						while(_g14 < datas.length) {
+							var data = datas[_g14];
+							++_g14;
 							data = features_SignatureHandler.reGT.replace(data,">");
 							data = features_SignatureHandler.reLT.replace(data,"<");
 							var args = features_FunctionDecoder.asFunctionArgs(data);
@@ -1647,58 +1727,80 @@ features_SignatureHandler.prototype = {
 							}).join(", ") + "):" + ret.type;
 							var si = new Vscode.SignatureInformation(data);
 							sigs.push(si);
-							si.parameters = args.map(function(v1) {
-								return new Vscode.ParameterInformation(v1.name,v1.type);
+							si.parameters = args.map(function(v4) {
+								return new Vscode.ParameterInformation(v4.name,v4.type);
 							});
 						}
 					}
 					accept(sh);
-				},function(m1) {
-					if(m1.error != null) Vscode.window.showErrorMessage(m1.error.message);
+				},function(m4) {
+					if(m4.error != null) Vscode.window.showErrorMessage(m4.error.message); else if(lastChar == ",") {
+						var fnInfo = null;
+						var _g15 = 0;
+						var _g25 = m4.infos;
+						while(_g15 < _g25.length) {
+							var i = _g25[_g15];
+							++_g15;
+							if(features_SignatureHandler.reFatalError.match(i.message)) {
+								fnInfo = features_FunctionDecoder.findNameAndParameterPlace(text1,char_pos - 1);
+								break;
+							}
+						}
+						if(fnInfo != null) {
+							activeParameter = fnInfo.cnt;
+							var char_pos5 = fnInfo.start;
+							if(char_pos5 == text1.length) byte_pos = js_node_buffer_Buffer.byteLength(text1); else byte_pos = js_node_buffer_Buffer.byteLength(HxOverrides.substr(text1,0,char_pos5));
+							make_request();
+							return;
+						}
+					}
 					reject(null);
 				});
 			};
-			var ds = _g.hxContext.getDocumentState(path);
-			var isDirty = client.isPatchAvailable?ds.document != null && ds.lastModification > ds.lastSave:ds.document != null && ds.lastModification > ds.lastSave || document.isDirty;
+			var make_request1 = make_request;
+			var ds1 = _g.hxContext.getDocumentState(path);
+			var isDirty = client.isPatchAvailable?ds1.document != null && ds1.lastModification > ds1.lastSave:ds1.document != null && ds1.lastModification > ds1.lastSave || document.isDirty;
 			var doRequest = function() {
 				if(cancelToken.isCancellationRequested) {
 					reject(null);
 					return;
 				}
-				if(client.isPatchAvailable) {
-					if(isDirty) _g.hxContext.patchFullDocument(ds).then(function(ds1) {
-						make_request();
-					},function(ds2) {
+				var isPatchAvailable = client.isPatchAvailable;
+				var isServerAvailable = client.isServerAvailable;
+				if(isPatchAvailable) {
+					if(isDirty) _g.hxContext.patchFullDocument(ds1).then(function(ds2) {
+						make_request1();
+					},function(ds3) {
 						reject(null);
-					}); else make_request();
+					}); else make_request1();
 				} else changeDebouncer.whenDone(function() {
 					if(cancelToken.isCancellationRequested) {
 						reject(null);
 						return;
 					}
 					var ps = [];
-					var _g12 = 0;
+					var _g1 = 0;
 					var _g2 = _g.hxContext.getDirtyDocuments();
-					while(_g12 < _g2.length) {
-						var ds3 = _g2[_g12];
-						++_g12;
-						ds3.diagnoseOnSave = false;
-						ps.push(_g.hxContext.saveDocument(ds3));
+					while(_g1 < _g2.length) {
+						var ds4 = _g2[_g1];
+						++_g1;
+						ds4.diagnoseOnSave = false;
+						ps.push(_g.hxContext.saveDocument(ds4));
 					}
-					if(ps.length == 0) make_request(); else Promise.all(ps).then(function(all) {
+					if(ps.length == 0) make_request1(); else Promise.all(ps).then(function(all) {
 						if(cancelToken.isCancellationRequested) {
 							reject(null);
 							return;
 						}
-						make_request();
-					},function(all3) {
+						make_request1();
+					},function(all4) {
 						reject(null);
 					});
 				});
 			};
 			if(!client.isServerAvailable) _g.hxContext.launchServer().then(function(port) {
 				doRequest();
-			},function(port3) {
+			},function(port5) {
 				reject(null);
 			}); else doRequest();
 		});
@@ -2733,9 +2835,13 @@ features_CompletionHandler.reMethod = new EReg("Void|Unknown","");
 features_CompletionHandler.reWord = new EReg("[a-zA-Z_$]","");
 features_CompletionHandler.reWS = new EReg("[\r\n\t\\s]","");
 features_DefinitionHandler.rePos = new EReg("[^<]*<pos>(.+)</pos>.*","");
+features_FunctionDecoder.reFirstId = new EReg("[_a-zA-Z]","");
+features_FunctionDecoder.reLastId = new EReg("[0-9_a-zA-Z]","");
+features_FunctionDecoder.reWS = new EReg("[\r\n\t\\s]","");
 features_SignatureHandler.reType = new EReg("<type(\\s+opar='(\\d+)')?(\\s+index='(\\d+)')?>","");
 features_SignatureHandler.reGT = new EReg("&gt;","g");
 features_SignatureHandler.reLT = new EReg("&lt;","g");
+features_SignatureHandler.reFatalError = new EReg("\\s*@fatalError(\\s+(.*))?","");
 features_hxml_CompletionHandler.reI = new EReg("<i n=\"([^\"]+)\" k=\"([^\"]+)\"( ip=\"([0-1])\")?( f=\"(\\d+)\")?><t>([^<]*)</t><d>([^<]*)</d></i>","");
 features_hxml_CompletionHandler.reGT = new EReg("&gt;","g");
 features_hxml_CompletionHandler.reLT = new EReg("&lt;","g");

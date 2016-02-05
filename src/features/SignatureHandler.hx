@@ -59,6 +59,70 @@ class FunctionDecoder {
         args.push({name:'', type:data.substr(sp)});
         return args;
     }
+    static var reFirstId = ~/[_a-zA-Z]/;
+    static var reLastId = ~/[0-9_a-zA-Z]/;
+    static var reWS = ~/[\r\n\t\s]/;
+    public static function findNameAndParameterPlace(data:String, from:Int) {
+        var argCount = 0;
+        var parLevel = 0;
+        var bkLevel = 0;
+        var strSep = '"';
+        var inStr = false;
+        while (from >= 0) {
+            var c = data.charAt(from--);
+            if (inStr) {
+                switch(c) {
+                    case strSep:
+                        var slCnt = 0;
+                        var i = from;
+                        while (i >= 0) {
+                            if (data.charAt(i) == "\\") slCnt++;
+                            else break;
+                            i--;
+                        }
+                        if ((slCnt & 1) == 0) inStr = false;
+                        else from = i;
+                }
+            } else {
+                switch(c) {
+                    case '(':
+                        parLevel++;
+                        if (parLevel == 1) {
+                            var pp = from + 1;
+                            while (from >= 0) {
+                                c = data.charAt(from);
+                                if (!reWS.match(c)) break;
+                                from --;
+                            }
+                            if (from < 0) break;
+                            if (!reLastId.match(c)) break;
+                            from --;
+                            while (from >= 0) {
+                                c = data.charAt(from);
+                                if (!reLastId.match(c)) break;
+                                from --;
+                            }
+                            if (reFirstId.match(data.charAt(from + 1))) {
+                                return {start:pp + 1, cnt:argCount};
+                            }
+                        }
+                    case '[':
+                        bkLevel++;
+                        if (bkLevel != 0) break;
+                    case ')':
+                        parLevel--;
+                    case ']':
+                        bkLevel--;
+                    case ',' if (bkLevel==0 && parLevel==0):
+                        argCount++;
+                    case "'" | '"':
+                        inStr = true;
+                        strSep = c;
+                }
+            }
+        }
+        return null;
+    }
 }
 
 class SignatureHandler implements SignatureHelpProvider
@@ -78,7 +142,7 @@ class SignatureHandler implements SignatureHelpProvider
   static var reType = ~/<type(\s+opar='(\d+)')?(\s+index='(\d+)')?>/;
   static var reGT = ~/&gt;/g;
   static var reLT = ~/&lt;/g;
-
+  static var reFatalError = ~/\s*@fatalError(\s+(.*))?/;
   public function provideSignatureHelp(document:TextDocument,
                                     position:Position,
                                     cancelToken:CancellationToken):Thenable<SignatureHelp>
@@ -87,15 +151,27 @@ class SignatureHandler implements SignatureHelpProvider
 
       var changeDebouncer = hxContext.changeDebouncer;
 
-      var documentState = hxContext.getDocumentState(document.uri.fsPath);
-      var path = documentState.path();
+      var ds = hxContext.getDocumentState(document.uri.fsPath, document);
+      var path = ds.path();
 
       var text = document.getText();
       var char_pos = document.offsetAt(position);
       var text = document.getText();
-      var byte_pos = Tool.byte_pos(text, char_pos);
+      var lastChar = text.charAt(char_pos-1);
+      var byte_pos = 0;
 
       var displayMode = haxe.HaxeCmdLine.DisplayMode.Default;
+
+      var activeParameter = 0;
+
+      if (lastChar == ",") {
+          ds.text = text.substr(0, char_pos) + "VSCTool.fatalError()." + text.substr(char_pos);
+          ds.modified();
+          byte_pos = Tool.byte_pos(text, char_pos + 21);
+//          displayMode = haxe.HaxeCmdLine.DisplayMode.
+      } else {
+          byte_pos = Tool.byte_pos(text, char_pos);
+      }
 
       return new Thenable<SignatureHelp>(function(accept, reject) {
           if (cancelToken.isCancellationRequested) {
@@ -115,16 +191,18 @@ class SignatureHandler implements SignatureHelpProvider
               ;
               hxContext.send(null, true, 1).then(
                   function(m:Message) {
+                      hxContext.diagnostics.clear();
+
                       var datas = m.stderr;
                       var sh = new SignatureHelp();
-                      sh.activeParameter = 0;
+                      sh.activeParameter = activeParameter;
                       sh.activeSignature = 0;
                       var sigs = [];
                       sh.signatures = sigs;
                       if ((datas.length > 2) && reType.match(datas[0])) {
                           var opar = Std.parseInt(reType.matched(2))|0;
                           var index = Std.parseInt(reType.matched(4))|0;
-                          if (index >= 0) sh.activeParameter = index;
+                          if (index > 0) sh.activeParameter = index;
                           datas.shift();
                           datas.pop();
                           datas.pop();
@@ -149,6 +227,23 @@ class SignatureHandler implements SignatureHelpProvider
                   },
                   function(m:Message) {
                       if (m.error != null) m.error.message.displayAsError();
+                      else {
+                          if (lastChar == ",") {
+                              var fnInfo = null;
+                              for (i in m.infos) {
+                                  if (reFatalError.match(i.message)) {
+                                      fnInfo = text.findNameAndParameterPlace(char_pos - 1);
+                                      break;
+                                  }
+                              }
+                              if (fnInfo != null) {
+                                  activeParameter = fnInfo.cnt;
+                                  byte_pos = Tool.byte_pos(text, fnInfo.start);
+                                  make_request();
+                                  return;
+                              }
+                          }
+                      }
                       reject(null);
                   }
             );

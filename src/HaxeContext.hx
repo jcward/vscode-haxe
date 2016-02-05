@@ -27,7 +27,7 @@ import haxe.Timer;
 
 using HaxeContext;
 
-typedef DocumentState = {saveStartAt:Float, lastSave:Float, lastModification:Float, realPath:String, document:TextDocument, diagnoseOnSave:Bool, tmpPath:String};
+typedef DocumentState = {saveStartAt:Float, lastSave:Float, lastModification:Float, realPath:String, document:TextDocument, diagnoseOnSave:Bool, tmpPath:String, text:Null<String>};
 
 typedef PendingFile = {ds:DocumentState, accept:DocumentState->Void, reject:DocumentState->Void, lastModification:Float};
 
@@ -229,7 +229,9 @@ class HaxeContext  {
         projectDir = Vscode.workspace.rootPath;
         tmpToRealMap = new Map();
         insensitiveToSensitiveMap = new Map();
+
         initTmpDir();
+        createToolFile();
 
         diagnostics =  Vscode.languages.createDiagnosticCollection(languageID());
         context.subscriptions.push(cast diagnostics);
@@ -275,7 +277,8 @@ class HaxeContext  {
                     }
                 }
                 try {
-                    Fs.writeFileSync(tmpFile, ds.document.getText(), "utf8");
+                    Fs.writeFileSync(tmpFile, (ds.text==null)?ds.document.getText():ds.text, "utf8");
+                    ds.text = null;
                     ds.tmpPath = tmpFile;
                     tmpToRealMap.set(tmpFile.normalize(), path);
                 } catch(e:Dynamic) {
@@ -405,7 +408,8 @@ class HaxeContext  {
                 if (useTmpDir && ds.tmpPath != null) {
                     try {
                         ds.saveStarted();
-                        Fs.writeFile(ds.tmpPath, document.getText(), "utf8", function(e) {
+                        Fs.writeFile(ds.tmpPath,  (ds.text==null)?ds.document.getText():ds.text, "utf8", function(e) {
+                            ds.text = null;
                             if (e != null) reject(ds);
                             else {
                                 onSaveDocument(ds.document);
@@ -547,6 +551,25 @@ class HaxeContext  {
         useTmpDir = false;
         tmpProjectDir = null;
     }
+    function createToolFile() {
+        if (useTmpDir) {
+            Fs.writeFileSync(Path.join(tmpProjectDir, "VSCTool.hx"),
+"package;
+import haxe.macro.Context;
+class VSCTool {
+    macro public static function fatalError(){
+        Context.fatalError('@fatalError', Context.currentPos());
+        return macro null;
+    }
+}"
+            , "utf8");
+        }
+    }
+    function removeToolFile() {
+        if (useTmpDir) {
+            Fs.unlinkSync(Path.join(tmpProjectDir, "VSCTool.hx"));
+        }
+    }
     public function launchServer() {
         var host = configuration.haxeServerHost;
         var port = configuration.haxeServerPort;
@@ -623,6 +646,7 @@ class HaxeContext  {
             haxeProcess = null;
         }
         client = null;
+        removeToolFile();
         return null;
     }
     public function applyDiagnostics(message:Message) {
@@ -666,9 +690,9 @@ class HaxeContext  {
             if (useTmpDir && ds.tmpPath==null) createTmpFile(ds);
         } else {
             var t = getTime();
-            ds = {realPath:path, saveStartAt:0, lastSave:t, lastModification:0, document:document, diagnoseOnSave:configuration.haxeDiagnoseOnSave, tmpPath:null};
+            ds = {realPath:path, saveStartAt:0, lastSave:t, lastModification:0, document:document, diagnoseOnSave:configuration.haxeDiagnoseOnSave, tmpPath:null, text:null};
             documentsState.set(path, ds);
-            documentsState.set(npath, ds);
+            if (npath != path) documentsState.set(npath, ds);
             createTmpFile(ds);
         }
         return ds;
