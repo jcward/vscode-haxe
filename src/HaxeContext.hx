@@ -584,7 +584,7 @@ class VSCTool {
                     configuration.haxeServerPort = port;
                     client.port = port;
 
-                    'Using ${ client.isPatchAvailable ? "--patch" : "non-patching" } completion server at ${configuration.haxeServerHost} on port $port'.displayAsInfo();
+                    'Using ${client.version} ${ client.isPatchAvailable ? "--patch" : "non-patching" } completion server at ${configuration.haxeServerHost} on port $port'.displayAsInfo();
 
                     if (data.isPatchAvailable) {
                         var cl = client.cmdLine.save();
@@ -612,8 +612,10 @@ class VSCTool {
                     incPort = 1;
                     haxeProcess = ChildProcess.spawn(configuration.haxeExec, ["--wait", '$port']);
                     if (haxeProcess.pid > 0)  {
-                        client.port = port;
-                        client.infos(onData);
+                        haxe.Timer.delay(function(){
+                            client.port = port;
+                            client.infos(onData);
+                        }, 800);
                     }
                     haxeProcess.on("error", function(err){
                         haxeProcess = null;

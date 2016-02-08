@@ -165,7 +165,8 @@ class SignatureHandler implements SignatureHelpProvider
       var activeParameter = 0;
 
       if (lastChar == ",") {
-          ds.text = text.substr(0, char_pos) + "VSCTool.fatalError()." + text.substr(char_pos);
+          text = text.substr(0, char_pos) + "VSCTool.fatalError()." + text.substr(char_pos);
+          ds.text = text;
           ds.modified();
           byte_pos = Tool.byte_pos(text, char_pos + 21);
 //          displayMode = haxe.HaxeCmdLine.DisplayMode.
@@ -229,6 +230,7 @@ class SignatureHandler implements SignatureHelpProvider
                       if (m.error != null) m.error.message.displayAsError();
                       else {
                           if (lastChar == ",") {
+                              hxContext.diagnostics.clear();
                               var fnInfo = null;
                               for (i in m.infos) {
                                   if (reFatalError.match(i.message)) {

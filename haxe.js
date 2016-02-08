@@ -584,7 +584,7 @@ HaxeContext.prototype = {
 				if(data.isHaxeServer) {
 					_g.configuration.haxeServerPort = port;
 					_g.client.port = port;
-					Vscode.window.showInformationMessage("Using " + (_g.client.isPatchAvailable?"--patch":"non-patching") + " completion server at " + _g.configuration.haxeServerHost + " on port " + port);
+					Vscode.window.showInformationMessage("Using " + _g.client.version + " " + (_g.client.isPatchAvailable?"--patch":"non-patching") + " completion server at " + _g.configuration.haxeServerHost + " on port " + port);
 					if(data.isPatchAvailable) {
 						var cl = _g.client.cmdLine.save();
 						var dd = _g.resetDirtyDocuments();
@@ -608,10 +608,10 @@ HaxeContext.prototype = {
 					port += incPort;
 					incPort = 1;
 					_g.haxeProcess = js_node_ChildProcess.spawn(_g.configuration.haxeExec,["--wait","" + port]);
-					if(_g.haxeProcess.pid > 0) {
+					if(_g.haxeProcess.pid > 0) haxe_Timer.delay(function() {
 						_g.client.port = port;
 						_g.client.infos(onData);
-					}
+					},800);
 					_g.haxeProcess.on("error",function(err) {
 						_g.haxeProcess = null;
 						Vscode.window.showErrorMessage("Can't spawn " + _g.configuration.haxeExec + " process\n" + err.message);
@@ -1688,7 +1688,8 @@ features_SignatureHandler.prototype = {
 		var displayMode = haxe_DisplayMode.Default;
 		var activeParameter = 0;
 		if(lastChar == ",") {
-			ds.text = HxOverrides.substr(text1,0,char_pos) + "VSCTool.fatalError()." + HxOverrides.substr(text1,char_pos,null);
+			text1 = HxOverrides.substr(text1,0,char_pos) + "VSCTool.fatalError()." + HxOverrides.substr(text1,char_pos,null);
+			ds.text = text1;
 			ds.lastModification = new Date().getTime();
 			var char_pos1 = char_pos + 21;
 			if(char_pos1 == text1.length) byte_pos = js_node_buffer_Buffer.byteLength(text1); else byte_pos = js_node_buffer_Buffer.byteLength(HxOverrides.substr(text1,0,char_pos1));
@@ -1735,6 +1736,7 @@ features_SignatureHandler.prototype = {
 					accept(sh);
 				},function(m4) {
 					if(m4.error != null) Vscode.window.showErrorMessage(m4.error.message); else if(lastChar == ",") {
+						_g.hxContext.diagnostics.clear();
 						var fnInfo = null;
 						var _g15 = 0;
 						var _g25 = m4.infos;
@@ -2556,6 +2558,14 @@ var haxe_Timer = function(time_ms) {
 	},time_ms);
 };
 haxe_Timer.__name__ = true;
+haxe_Timer.delay = function(f,time_ms) {
+	var t = new haxe_Timer(time_ms);
+	t.run = function() {
+		t.stop();
+		f();
+	};
+	return t;
+};
 haxe_Timer.prototype = {
 	stop: function() {
 		if(this.id == null) return;
