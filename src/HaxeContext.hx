@@ -126,7 +126,7 @@ class HaxeContext  {
     public inline function needDiagnostic(ds:DocumentState) return ds.lastSave > lastDiagnostic;
 
     public function getPackageFromString(path:String) return {
-        var npath = path.toLowerCase();
+        var npath = (platform.Platform.instance.isWin)?path.toLowerCase():path;
         for (cp in classPathsByLength) {
             var tmp = npath.split(cp);
             if (tmp.length > 1) {

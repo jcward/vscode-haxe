@@ -165,7 +165,7 @@ HaxeContext.prototype = {
 		return ds.lastSave > this.lastDiagnostic;
 	}
 	,getPackageFromString: function(path) {
-		var npath = path.toLowerCase();
+		var npath = platform_Platform.instance.isWin?path.toLowerCase():path;
 		var _g = 0;
 		var _g1 = this.classPathsByLength;
 		while(_g < _g1.length) {
