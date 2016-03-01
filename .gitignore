@@ -1,1 +1,3 @@
 *.vsix
+.vscode/settings.json
+.haxelib
