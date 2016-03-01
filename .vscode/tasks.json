@@ -3,9 +3,12 @@
 
 {
 	"version": "0.1.0",
-	"command": "haxe.exe",
+	"command": "haxe",
+	"windows": {
+		"command": "haxe.exe"
+	},
 	"isShellCommand": true,
-	"args": ["build.hxml"],
+	"args": ["build.hxml","-cmd","echo 'Build success !'"],
 	"showOutput": "always",
 	"problemMatcher": {
 		// The problem is owned by the typescript language service. Ensure that the problems
