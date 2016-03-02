@@ -31,4 +31,6 @@ Some frameworks support the creation of .hxml files so you can use completion wi
 
 **Kha** creates a build/project-<platform>.hxml file you can use.
 
+**Flambe's** `haxe-flags` command will generate an .hxml file, e.g. `touch build.hxml && flambe haxe-flags >> ./build.hxml`
+
 If anyone has info on **Snow** or other frameworks' .hxml file output, I'd be happy to add it here.
