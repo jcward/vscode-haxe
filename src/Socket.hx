@@ -31,32 +31,32 @@ class Socket {
     }
     function onData(data:Dynamic, callback:Null<Socket->String->Void>) {
 #if js
-        data = data.toString();        
-#end    
+        data = data.toString();
+#end
         datas.push(data);
         if (callback!=null) callback(this, data);
     }
     function onClose(callback:Socket->Void) {
         isConnected = false;
         isClosed = true;
-        if (callback!=null) callback(this);        
+        if (callback!=null) callback(this);
     }
     public function connect (host:String, port:Int, onConnect:Null<Socket->Void>, onData:Null<Socket->String->Void>, onError:Null<Socket->Error->Void>, ?onClose:Null<Socket->Void>=null) {
         error = null;
  #if js
        s.on('error', function(err) {
-          error = err;         
-          this.onError(err, onError);  
+          error = err;
+          this.onError(err, onError);
        });
        s.on('data', function(data) {
-          this.onData(data, onData);  
+          this.onData(data, onData);
        });
        s.on('close', function() {
-          this.onClose(onClose);  
-       });       
+          this.onClose(onClose);
+       });
        s.connect(port, host, function() {
            isConnected = true;
-           this.onConnect(onConnect);       
+           this.onConnect(onConnect);
        });
  #else
     s.connect(new Host(host), port);
@@ -70,5 +70,10 @@ class Socket {
     }
     public function readAll() {
         return s.read();
+    }
+    public function close() {
+#if js
+        s.destroy();
+#end
     }
 }

@@ -88,6 +88,7 @@ extern class Window {
   public function showWarningMessage(message:String/* , ...items:Array<String> */):Thenable<String>;
   //public function showWarningMessage<T extends MessageItem>(message:String/* , ...items:Array<T> */):Thenable<T>;
 }
+@:native("Vscode.Workspace")
 extern class Workspace {
   // Variables
   public var rootPath:String;
@@ -112,7 +113,7 @@ extern class Workspace {
 extern class CancellationToken {
   // Properties
   public var isCancellationRequested:Bool;
-  public var onCancellationRequested:Event<Dynamic>;
+  public var onCancellationRequested:(Event<Dynamic>->Void)->Void;
 }
 extern class CancellationtokenSource {
   // Properties
@@ -341,11 +342,8 @@ extern class Extensioncontext {
   // Methods
   public function asAbsolutePath(relativePath:String):String;
 }
+@:native("Vscode.FileSystemWatcher")
 extern class FileSystemWatcher {
-  // Events
-  // TODO: onDidChange:Event<Uri>;
-  // TODO: onDidCreate:Event<Uri>;
-  // TODO: onDidDelete:Event<Uri>;
   // Static
   public static function from(val:Dynamic):Disposable;
   // Constructors
@@ -355,6 +353,9 @@ extern class FileSystemWatcher {
   public var ignoreCreateEvents:Bool;
   public var ignoreDeleteEvents:Bool;
   // Methods
+  public function onDidChange(callback:Event<Uri>->Void):Void;
+  public function onDidCreate(callback:Event<Uri>->Void):Void;
+  public function onDidDelete(callback:Event<Uri>->Void):Void;
   public function dispose():Dynamic;
 }
 extern class FormattingOptions {
@@ -780,12 +781,11 @@ extern class ExtensionContext {
 	var subscriptions(default,null):Array<Disposable>;
 }
 
-
 @:native('Promise')
 extern class Thenable<T> {
-	public function new(resolve:(T->Void)->Void, ?reject:(Dynamic->Void)->Void);
-	public function then(onResolved:T->Void, ?onError:Dynamic->Void):Thenable<T>;
-	//public function resolve(val:T):Thenable<T>;
+    @:overload(function (callback:(T->Void)->(T->Void)->Void):Thenable<T> {})
+	public function new(callback:(T->Void)->Void);
+	public function then(onResolved:T->Void, ?onError:T->Void):Thenable<T>;
 }
 
 

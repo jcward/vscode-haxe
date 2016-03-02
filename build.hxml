@@ -3,4 +3,6 @@
 -js haxe.js
 -D js-es5
 -lib hxnodejs
+#if using patch server resend whole file, there  is a bug now for micro patch
+-D DO_FULL_PATCH
 Main

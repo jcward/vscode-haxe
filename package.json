@@ -3,14 +3,17 @@
 	"description": "Haxe Language Extension",
 	"version": "0.0.4",
 	"publisher": "haxedevs",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jcward/vscode-haxe"
-  },
-  "galleryBanner": {
-    "color": "#F68712"
-  },
-  "icon": "haxe-logo.png",
+	"author": {
+		"name": "Patrick Le Clec'h & Jeff Ward & Dan Korostelev"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jcward/vscode-haxe"
+	},
+	"galleryBanner": {
+		"color": "#F68712"
+	},
+	"icon": "haxe-logo.png",
 	"engines": {
 		"vscode": "^0.10.1"
 	},
@@ -18,7 +21,10 @@
 		"Languages"
 	],
 	"activationEvents": [
-		"onLanguage:haxe"
+		"onLanguage:haxe",
+				"onLanguage:hxml",
+				"workspaceContains:build.hxml",
+				"workspaceContains:project.hxml"
 	],
 	"main": "./haxe.js",
 	"contributes": {
@@ -27,7 +33,7 @@
 				"command": "haxe.hello",
 				"title": "Hello from Haxe!"
 			}
-		],	
+		],
 		"languages": [
 			{
 				"id": "haxe",
@@ -54,41 +60,72 @@
 				"path": "./syntaxes/hxml.tmLanguage"
 			}
 		],
-        "configuration": {
-            "type": "object",
-            "title": "Haxe configuration",
-            "properties": {
-                "haxe.haxePath": {
-                "type": "string",
-                "default": "",
-                "description": "Where to find haxe executable. If not set must be in your global path"
-                },
-                "haxe.haxelibPath": {
-                "type": "string",
-                "default": "",
-                "description": "Where to find haxelib executable. If not set must be in your global path"
-                },
-                "haxe.haxeDefaultBuildFile": {
-                "type": "string",
-                "default": "build.hxml",
-                "description": "Name of your default build hxml file"
-                },
-                "haxe.haxeServerHost": {
-                "type": "string",
-                "default": "127.0.0.1",
-                "description": "Address of the haxe server"
-                },
-                "haxe.haxeServerPort": {
-                "type": "integer",
-                "default": 6000,
-                "description": "Port number of the haxe server"
-                },
-                "haxe.haxeDiagnosticDelay": {
-                "type": "integer",
-                "default": 500,
-                "description": "Time (in ms) after we can launch a file validation"
-                }
-            }
-        }
+				"snippets": [
+						{
+								"language": "haxe",
+								"path": "./snippets/haxe.json"
+						}
+				],
+				"configuration": {
+						"type": "object",
+						"title": "Haxe configuration",
+						"properties": {
+								"haxe.haxePath": {
+								"type": "string",
+								"default": "",
+								"description": "Where to find haxe executable. If not set must be in your global path"
+								},
+								"haxe.haxelibPath": {
+								"type": "string",
+								"default": "",
+								"description": "Where to find haxelib executable. If not set must be in your global path"
+								},
+								"haxe.haxeDefaultBuildFile": {
+								"type": "string",
+								"default": "build.hxml",
+								"description": "Name of your default build hxml file"
+								},
+								"haxe.haxeServerHost": {
+								"type": "string",
+								"default": "127.0.0.1",
+								"description": "Address of the haxe server"
+								},
+								"haxe.haxeServerPort": {
+								"type": "integer",
+								"default": 6000,
+								"description": "Port number of the haxe server"
+								},
+								"haxe.haxeDiagnoseOnSave": {
+								"type": "boolean",
+								"default": true,
+								"description": "Validate project when a file is saved"
+								},
+								"haxe.haxeDiagnosticDelay": {
+								"type": "integer",
+								"default": 2000,
+								"description": "Time (in ms) after we can launch a file validation"
+								},
+								"haxe.haxeCacheHaxelib": {
+								"type": "boolean",
+								"default": true,
+								"description": "If true the -lib will be cached into internal build file. It will be refreshed when real hxml file change"
+								},
+								"haxe.haxeVSCodeBuildFile": {
+								"type": "string",
+								"default": "vscode-project.hxml",
+								"description": "File that will be used internally(will be overwritten when the real hxml file changed) for compile/build/..."
+								},
+								"haxe.haxeTmpDirectory": {
+								"type": "string",
+								"default": "",
+								"description": "If set a tmp directory will be used, and no changed will be made to the source file. Using a ramdisk is preferable"
+								},
+								"haxe.haxeUseTmpAsWorkingDirectory": {
+								"type": "boolean",
+								"default": false,
+								"description": "If set and a tmp directory also specified, the tmp directory will be used as the working directory"
+								}
+						}
+				}
 	}
 }
