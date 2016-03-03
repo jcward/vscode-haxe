@@ -8,29 +8,44 @@ This extension provides:
 - Function signature completion
 - Jump / peek definition (ctrl-click / ctrl-hover)
 
-Feature  | Preview
+Code Completion  | Peek Definition
 ------------- | -------------
-Code Completion  |  <img src="https://lh3.googleusercontent.com/-ekHamgDiuZM/VnOd05QH04I/AAAAAAAAO4I/cfu718KBlO8/s1600/test.gif" width=400>
-Peek definition  | <img src="https://lh3.googleusercontent.com/-0cTfJGLLrpk/VoBPk4GAz_I/AAAAAAAAPKs/bWvpJBDjwnA/s400/definition_peek.gif" width=400>
+<img src="https://lh3.googleusercontent.com/-ekHamgDiuZM/VnOd05QH04I/AAAAAAAAO4I/cfu718KBlO8/s1600/test.gif" width=400> | <img src="https://lh3.googleusercontent.com/-0cTfJGLLrpk/VoBPk4GAz_I/AAAAAAAAPKs/bWvpJBDjwnA/s400/definition_peek.gif" width=400>
 
-#Installation
-Place the vscode-haxe directory in your `.vscode/extensions` directory:
+#Install the Extension
+
+For the stable version of this plugin, it is availble in the [VSCode Marketplace](https://marketplace.visualstudio.com/items/haxedevs.haxe). From within VSCode, press F1, type `ext install` and press enter, type `haxe` and it will be listed under publisher **Haxe Devs**.
+
+For development versions, place the `vscode-haxe` directory in your `.vscode/extensions` directory:
 - Windows: `%USERPROFILE%\.vscode\extensions`
 - Linux / Mac: `~/.vscode/extensions`
 
-#Code completion status: BETA
-The code completion in this extension is currently in beta. There are bugs, limitations, and requirements that still need to be worked out. There's an effort to standardize Haxe IDE support over at [snowkit/Tides](https://github.com/snowkit/tides). When this is ready, we'll integrate it (no need to duplicate effort and provide divergent experiences.)
+#Project setup
 
-#Current limitations:
-Some features may require a forthcoming version of the Haxe compiler.
+Code completion and other features require an `.hxml` file in your project. Various frameworks (OpenFL, Snow, Kha, etc) can generate the `.hxml` file for you -- see the Framework notes section below.
+
+By default the extension looks for a `build.hxml` in the root of the project, but you can set the location in your project's settings under File -> Preferences -> Workspace Settings. Add the following setting locating your `.hxml` file relative to the project directory:
+
+```
+{
+    "haxe.haxeDefaultBuildFile": "path/to/build.hxml"
+}
+```
 
 #Framework notes:
-Some frameworks support the creation of .hxml files so you can use completion with your project.
+Some frameworks support the creation of `.hxml` files, which is necessary to run the Haxe code completion engine. Below is a list of how you can get an .hxml file in various frameworks, and example command to put the .hxml file in the root of your project directory (the folder you open VSCode.)
 
-**OpenFL's** display command will show the contents of the necessary .hxml file. On Windows, paste the output into a `build.hxml` file, or on Linux/Mac, you can create a `build.hxml` file in your project directory by running, e.g. `openfl display windows > build.hxml` (substitue the proper platform name for your project.)
+Framework     | How to get .hxml                   | Sample Linux/OSX usage
+------------- | -----------------------------------|------------------------
+OpenFL        | `openfl display <platform>`        | `openfl display linux > build.hxml`
+Snow          | `haxelib run flow info --hxml`     | `haxelib run flow info --hxml > build.hxml`
+Kha           | See build/project-<platform>.hxml  | `ln -s build/project-windows.hxml build.hxml`
+Flambe        | `flambe haxe-flags`                | `flambe haxe-flags > build.hxml`
 
-**Kha** creates a build/project-<platform>.hxml file you can use.
+#Other notes and status
 
-**Flambe's** `haxe-flags` command will generate an .hxml file, e.g. `touch build.hxml && flambe haxe-flags >> ./build.hxml`
+##Code completion status: BETA
+The code completion in this extension is currently in beta. There are bugs, limitations, and requirements that still need to be worked out. There's an effort to standardize Haxe IDE support over at [snowkit/Tides](https://github.com/snowkit/tides). When this is ready, we'll integrate it (no need to duplicate effort and provide divergent experiences.)
 
-If anyone has info on **Snow** or other frameworks' .hxml file output, I'd be happy to add it here.
+##Current limitations:
+Some features may require a forthcoming version of the Haxe compiler.
