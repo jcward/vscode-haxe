@@ -51,3 +51,27 @@ The code completion in this extension is currently in beta. There are bugs, limi
 
 ##Current limitations:
 Some features may require a forthcoming version of the Haxe compiler.
+
+##Troubleshooting the completion features
+You can start the haxe completion server by hand in verbose mode in a separate terminal. First, kill any existing Haxe completion servers, start it with `haxe -v --wait 6000`, and open your project in code. Here's an example in Linux:
+
+```
+>pkill haxe
+>haxe -v --wait 6000
+```
+After starting my project, the console spits out the arguments and results of the completion server, e.g.:
+```
+Client connected
+Waiting for data...
+Reading 203 bytes
+Processing Arguments [-D,display-details,--cwd,/home/jward/dev/haxe_play/vscode-hxcpp-debug/test openfl,vscode-project.hxml,--no-output,--display,/home/jward/dev/haxe_play/vscode-hxcpp-debug/test openfl/Source/Main.hx@485]
+Parsed /home/jward/dev/haxe_play/vscode-hxcpp-debug/test openfl/Source/Main.hx
+Completion Response =
+<list>
+...
+</list>
+
+Stats = 1 files, 507 classes, 927 methods, 29 macros
+Time spent : 0.210s
+```
+
