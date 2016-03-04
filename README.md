@@ -64,8 +64,8 @@ After starting my project, the console spits out the arguments and results of th
 Client connected
 Waiting for data...
 Reading 203 bytes
-Processing Arguments [-D,display-details,--cwd,/home/jward/dev/haxe_play/vscode-hxcpp-debug/test openfl,vscode-project.hxml,--no-output,--display,/home/jward/dev/haxe_play/vscode-hxcpp-debug/test openfl/Source/Main.hx@485]
-Parsed /home/jward/dev/haxe_play/vscode-hxcpp-debug/test openfl/Source/Main.hx
+Processing Arguments [-D,display-details,--cwd,/home/jward/dev/test openfl,vscode-project.hxml,--no-output,--display,/home/jward/dev/test openfl/Source/Main.hx@485]
+Parsed /home/jward/dev/test openfl/Source/Main.hx
 Completion Response =
 <list>
 ...
