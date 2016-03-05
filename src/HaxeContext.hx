@@ -607,7 +607,7 @@ class VSCTool {
 
                     return resolve(port);
                 } else {
-                    if (haxeProcess!=null) haxeProcess.kill("SIGKILL");
+                    killServer();
                     port += incPort;
                     incPort = 1;
                     haxeProcess = ChildProcess.spawn(configuration.haxeExec, ["--wait", '$port']);
@@ -627,6 +627,13 @@ class VSCTool {
             client.infos(onData);
         });
     }
+    function killServer() {
+        if (haxeProcess!=null) {
+            haxeProcess.kill("SIGKILL");
+            ChildProcess.spawn("kill", ["-9", '${haxeProcess.pid}']);
+            haxeProcess = null;
+        }
+    }
     function dispose():Dynamic {
         Vscode.window.showInformationMessage("Got dispose!");
 
@@ -643,10 +650,7 @@ class VSCTool {
             }
             client.sendAll(null);
         }
-        if (haxeProcess!=null) {
-            haxeProcess.kill("SIGKILL");
-            haxeProcess = null;
-        }
+        killServer();
         client = null;
         removeToolFile();
         return null;
