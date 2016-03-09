@@ -14,7 +14,7 @@ Code Completion  | Peek Definition
 
 Function Signature |
 ------------------ |
-<img src="https://cloud.githubusercontent.com/assets/2192439/13637928/180ff594-e5c7-11e5-831a-4a3653e53d54.gif" width=400>
+<img src="https://cloud.githubusercontent.com/assets/2192439/13637928/180ff594-e5c7-11e5-831a-4a3653e53d54.gif" width=400> |
 
 #Install the Extension
 
