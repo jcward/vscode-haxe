@@ -10,7 +10,11 @@ This extension provides:
 
 Code Completion  | Peek Definition
 ------------- | -------------
-<img src="https://lh3.googleusercontent.com/-ekHamgDiuZM/VnOd05QH04I/AAAAAAAAO4I/cfu718KBlO8/s1600/test.gif" width=400> | <img src="https://lh3.googleusercontent.com/-0cTfJGLLrpk/VoBPk4GAz_I/AAAAAAAAPKs/bWvpJBDjwnA/s400/definition_peek.gif" width=400>
+<img src="https://cloud.githubusercontent.com/assets/2192439/13637956/41882252-e5c7-11e5-947a-51e53a2eed46.gif" width=400> | <img src="https://cloud.githubusercontent.com/assets/2192439/13637971/542aa33a-e5c7-11e5-961d-d645e8f54df0.gif" width=400>
+
+Function Signature |
+------------------ |
+<img src="https://cloud.githubusercontent.com/assets/2192439/13637928/180ff594-e5c7-11e5-831a-4a3653e53d54.gif" width=400>
 
 #Install the Extension
 
