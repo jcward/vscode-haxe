@@ -4,14 +4,15 @@ class Main {
   static function main() {
     var something:haxe.io.Output;
     something.close();
-    function() {
-      var a:Int = 0;
-      var b = "";
-      b.split(',')[0].
-      
-    }
+
+    var a:Int = 0;
+    var b = "";
+    b.split(',');
+
   }
 
-  public function new() {
+  public function error() {
+
+    function() { /* unnamed function error */ }
   }
 }
