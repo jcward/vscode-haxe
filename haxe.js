@@ -1653,14 +1653,15 @@ features_FunctionDecoder.findNameAndParameterPlace = function(data,from) {
 		while(from >= 0) {
 			var c = data.charAt(from--);
 			if(inStr) {
-				var strSep1 = c;
-				var slCnt = 0;
-				var i = from;
-				while(i >= 0) {
-					if(data.charAt(i) == "\\") slCnt++; else break;
-					i--;
+				if(c == strSep) {
+					var slCnt = 0;
+					var i = from;
+					while(i >= 0) {
+						if(data.charAt(i) == "\\") slCnt++; else break;
+						i--;
+					}
+					if((slCnt & 1) == 0) inStr = false; else from = i;
 				}
-				if((slCnt & 1) == 0) inStr = false; else from = i;
 			} else switch(c) {
 			case "(":
 				parLevel++;
