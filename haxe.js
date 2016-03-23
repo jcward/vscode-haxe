@@ -1,4 +1,4 @@
-(function ($hx_exports, $global) { "use strict";
+(function ($hx_exports) { "use strict";
 var $estr = function() { return js_Boot.__string_rec(this,''); };
 function $extend(from, fields) {
 	function Inherit() {} Inherit.prototype = from; var proto = new Inherit();
@@ -559,7 +559,7 @@ HaxeContext.prototype = {
 		this.tmpProjectDir = null;
 	}
 	,createToolFile: function() {
-		if(this.useTmpDir) js_node_Fs.writeFileSync(js_node_Path.join(this.tmpProjectDir,"VSCTool.hx"),"package;\nimport haxe.macro.Context;\nclass VSCTool {\n    macro public static function fatalError(){\n        Context.fatalError('@fatalError', Context.currentPos());\n        return macro null;\n    }\n}","utf8");
+		if(this.useTmpDir) js_node_Fs.writeFileSync(js_node_Path.join(this.tmpProjectDir,"VSCTool.hx"),"package;\r\nimport haxe.macro.Context;\r\nclass VSCTool {\r\n    macro public static function fatalError(){\r\n        Context.fatalError('@fatalError', Context.currentPos());\r\n        return macro null;\r\n    }\r\n}","utf8");
 	}
 	,removeToolFile: function() {
 		if(this.useTmpDir) js_node_Fs.unlinkSync(js_node_Path.join(this.tmpProjectDir,"VSCTool.hx"));
@@ -598,7 +598,7 @@ HaxeContext.prototype = {
 					resolve(port);
 					return;
 				} else {
-					if(_g.haxeProcess != null) _g.haxeProcess.kill("SIGKILL");
+					_g.killServer();
 					port += incPort;
 					incPort = 1;
 					_g.haxeProcess = js_node_ChildProcess.spawn(_g.configuration.haxeExec,["--wait","" + port]);
@@ -616,6 +616,13 @@ HaxeContext.prototype = {
 			onData = onData1;
 			_g.client.infos(onData);
 		});
+	}
+	,killServer: function() {
+		if(this.haxeProcess != null) {
+			this.haxeProcess.kill("SIGKILL");
+			js_node_ChildProcess.spawn("kill",["-9","" + this.haxeProcess.pid]);
+			this.haxeProcess = null;
+		}
 	}
 	,dispose: function() {
 		Vscode.window.showInformationMessage("Got dispose!");
@@ -636,10 +643,7 @@ HaxeContext.prototype = {
 			}
 			this.client.sendAll(null);
 		}
-		if(this.haxeProcess != null) {
-			this.haxeProcess.kill("SIGKILL");
-			this.haxeProcess = null;
-		}
+		this.killServer();
 		this.client = null;
 		this.removeToolFile();
 		return null;
@@ -1649,14 +1653,15 @@ features_FunctionDecoder.findNameAndParameterPlace = function(data,from) {
 		while(from >= 0) {
 			var c = data.charAt(from--);
 			if(inStr) {
-				var strSep1 = c;
-				var slCnt = 0;
-				var i = from;
-				while(i >= 0) {
-					if(data.charAt(i) == "\\") slCnt++; else break;
-					i--;
+				if(c == strSep) {
+					var slCnt = 0;
+					var i = from;
+					while(i >= 0) {
+						if(data.charAt(i) == "\\") slCnt++; else break;
+						i--;
+					}
+					if((slCnt & 1) == 0) inStr = false; else from = i;
 				}
-				if((slCnt & 1) == 0) inStr = false; else from = i;
 			} else switch(c) {
 			case "(":
 				parLevel++;
@@ -2980,7 +2985,7 @@ js_Boot.__isNativeObj = function(o) {
 	return js_Boot.__nativeClassName(o) != null;
 };
 js_Boot.__resolveNativeClass = function(name) {
-	return $global[name];
+	return (Function("return typeof " + name + " != \"undefined\" ? " + name + " : null"))();
 };
 var js_html_compat_ArrayBuffer = function(a) {
 	if((a instanceof Array) && a.__enum__ == null) {
@@ -3206,10 +3211,10 @@ Bool.__ename__ = ["Bool"];
 var Class = { __name__ : ["Class"]};
 var Enum = { };
 var __map_reserved = {}
-var ArrayBuffer = $global.ArrayBuffer || js_html_compat_ArrayBuffer;
+var ArrayBuffer = (Function("return typeof ArrayBuffer != 'undefined' ? ArrayBuffer : null"))() || js_html_compat_ArrayBuffer;
 if(ArrayBuffer.prototype.slice == null) ArrayBuffer.prototype.slice = js_html_compat_ArrayBuffer.sliceImpl;
-var DataView = $global.DataView || js_html_compat_DataView;
-var Uint8Array = $global.Uint8Array || js_html_compat_Uint8Array._new;
+var DataView = (Function("return typeof DataView != 'undefined' ? DataView : null"))() || js_html_compat_DataView;
+var Uint8Array = (Function("return typeof Uint8Array != 'undefined' ? Uint8Array : null"))() || js_html_compat_Uint8Array._new;
 HaxeContext.reWS = new EReg("[\\s\t\r\n]","");
 HxmlContext.reComment = new EReg("\\s*#(.+)","");
 HxmlContext.reCheckOption = new EReg("^\\s*(-(-)?)([^\\s]+)(\\s+(.*))?","");
@@ -3255,4 +3260,4 @@ haxe_io_FPHelper.i64tmp = (function($this) {
 }(this));
 js_Boot.__toStr = {}.toString;
 js_html_compat_Uint8Array.BYTES_PER_ELEMENT = 1;
-})(typeof window != "undefined" ? window : exports, typeof window != "undefined" ? window : typeof global != "undefined" ? global : typeof self != "undefined" ? self : this);
+})(typeof window != "undefined" ? window : exports);
