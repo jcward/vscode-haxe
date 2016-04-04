@@ -16,6 +16,11 @@ Function Signature |
 ------------------ |
 <img src="https://cloud.githubusercontent.com/assets/2192439/13637928/180ff594-e5c7-11e5-831a-4a3653e53d54.gif" width=400> |
 
+Build Error Reporting |
+------------------ |
+<img src="https://cloud.githubusercontent.com/assets/2192439/14265893/681877fe-fa81-11e5-84e3-a897da115374.png" width=400>|
+
+
 #Install the Extension
 
 For the stable version of this plugin, it is availble in the [VSCode Marketplace](https://marketplace.visualstudio.com/items/haxedevs.haxe). From within VSCode, press F1, type `ext install` and press enter, type `haxe` and it will be listed under publisher **Haxe Devs**.
@@ -36,7 +41,12 @@ By default the extension looks for a `build.hxml` in the root of the project, bu
 }
 ```
 
-#Framework notes:
+#Build errors
+While the `vscode-haxe` extension doesn't support "build and launch" projects out-of-the-boxc (it gets complicated with so many targets and frameworks), it does show a list of build errors from the code completion compilation step. To access build errors, hit `CTRL-SHIFT-M` (or `CMD-SHIFT-M`), or click on the little warnings/errors icon in the lower-left corner of the VSCode window.
+
+Note: My personal vision of `vscode-haxe` is to be a language helper, while you can add project launch/debug support per your chosen framework / target if you choose. E.g. see [vscode-hxcpp-debug](https://github.com/jcward/vscode-hxcpp-debug) for an example of an extension that provides hxcpp launch and debug capabilities. But feel free to file an issue to discuss ideas.
+
+#Framework notes
 Some frameworks support the creation of `.hxml` files, which is necessary to run the Haxe code completion engine. Below is a list of how you can get an `.hxml` file from various frameworks.
 
 Framework     | How to get .hxml                    | Example usage
@@ -53,7 +63,7 @@ Feel free to file an issue with details for other frameworks.
 ##Code completion status: BETA
 The code completion in this extension is currently in beta. There are bugs, limitations, and requirements that still need to be worked out. There's an effort to standardize Haxe IDE support over at [snowkit/Tides](https://github.com/snowkit/tides). When this is ready, we'll integrate it (no need to duplicate effort and provide divergent experiences.)
 
-##Current limitations:
+##Current limitations
 Some features may require a forthcoming version of the Haxe compiler.
 
 ##Troubleshooting the completion features
