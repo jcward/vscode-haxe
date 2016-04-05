@@ -41,7 +41,7 @@ By default the extension looks for a `build.hxml` in the root of the project, bu
 While the `vscode-haxe` extension doesn't "build and launch" projects out-of-the-box (it gets complicated with so many targets and frameworks), it does show a list of build errors thanks to the code completion compilation step. To see build errors, hit `CTRL-SHIFT-M` (or `CMD-SHIFT-M`), or click on the little warnings/errors icon in the lower-left corner of the VSCode window: ![image](https://cloud.githubusercontent.com/assets/2192439/14284678/b7c904b0-fb05-11e5-815c-b73f28dbc096.png)
 
 
-Note: My personal vision of `vscode-haxe` is to be a language helper, while you can add project launch/debug support per your chosen framework / target if you choose. E.g. see [vscode-hxcpp-debug](https://github.com/jcward/vscode-hxcpp-debug) for an example of an extension that provides hxcpp launch and debug capabilities. But feel free to file an issue to discuss ideas.
+Note: My personal vision of `vscode-haxe` is to be a language helper, while you can add project launch / debug support per your chosen framework / target if you choose. E.g. see [vscode-hxcpp-debug](https://github.com/jcward/vscode-hxcpp-debug) for an example of an extension that provides hxcpp launch and debug capabilities. But feel free to file an issue to discuss ideas.
 
 #Framework notes
 Some frameworks support the creation of `.hxml` files, which is necessary to run the Haxe code completion engine. Below is a list of how you can get an `.hxml` file from various frameworks.
