@@ -12,13 +12,9 @@ Code Completion  | Peek Definition
 ------------- | -------------
 <img src="https://cloud.githubusercontent.com/assets/2192439/13637956/41882252-e5c7-11e5-947a-51e53a2eed46.gif" width=400> | <img src="https://cloud.githubusercontent.com/assets/2192439/13637971/542aa33a-e5c7-11e5-961d-d645e8f54df0.gif" width=400>
 
-Function Signature |
------------------- |
-<img src="https://cloud.githubusercontent.com/assets/2192439/13637928/180ff594-e5c7-11e5-831a-4a3653e53d54.gif" width=400> |
-
-Build Error Reporting |
------------------- |
-<img src="https://cloud.githubusercontent.com/assets/2192439/14265893/681877fe-fa81-11e5-84e3-a897da115374.png" width=400>|
+Function Signature | Build Error Reporting
+------------------ | ------------------------
+<img src="https://cloud.githubusercontent.com/assets/2192439/13637928/180ff594-e5c7-11e5-831a-4a3653e53d54.gif" width=400> | <img src="https://cloud.githubusercontent.com/assets/2192439/14265893/681877fe-fa81-11e5-84e3-a897da115374.png" width=400>
 
 
 #Install the Extension
@@ -42,7 +38,8 @@ By default the extension looks for a `build.hxml` in the root of the project, bu
 ```
 
 #Build errors
-While the `vscode-haxe` extension doesn't support "build and launch" projects out-of-the-boxc (it gets complicated with so many targets and frameworks), it does show a list of build errors from the code completion compilation step. To access build errors, hit `CTRL-SHIFT-M` (or `CMD-SHIFT-M`), or click on the little warnings/errors icon in the lower-left corner of the VSCode window.
+While the `vscode-haxe` extension doesn't "build and launch" projects out-of-the-box (it gets complicated with so many targets and frameworks), it does show a list of build errors thanks to the code completion compilation step. To see build errors, hit `CTRL-SHIFT-M` (or `CMD-SHIFT-M`), or click on the little warnings/errors icon in the lower-left corner of the VSCode window: ![image](https://cloud.githubusercontent.com/assets/2192439/14284678/b7c904b0-fb05-11e5-815c-b73f28dbc096.png)
+
 
 Note: My personal vision of `vscode-haxe` is to be a language helper, while you can add project launch/debug support per your chosen framework / target if you choose. E.g. see [vscode-hxcpp-debug](https://github.com/jcward/vscode-hxcpp-debug) for an example of an extension that provides hxcpp launch and debug capabilities. But feel free to file an issue to discuss ideas.
 
