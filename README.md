@@ -48,7 +48,7 @@ Some frameworks support the creation of `.hxml` files, which is necessary to run
 
 Framework     | How to get .hxml                      | Example usage
 ------------- | --------------------------------------|------------------------
-Lime          | `haxelib run lime display <platform>` | `haxelib run lime display linux > build.hxml`
+Lime / OpenFL | `haxelib run lime display <platform>` | `haxelib run lime display linux > build.hxml`
 Snow          | `haxelib run flow info --hxml`        | `haxelib run flow info --hxml > build.hxml`
 Kha           | See `build/project-<platform>.hxml`   | Set location in Workspace Settings
 Flambe        | `flambe haxe-flags`                   | `flambe haxe-flags > build.hxml`
