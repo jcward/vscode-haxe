@@ -7,8 +7,9 @@
 			"type": "extensionHost",
 			"request": "launch",
 			"runtimeExecutable": "${execPath}",
-            "sourceMaps": true,
-			"args": ["--extensionDevelopmentPath=${workspaceRoot}" ]
+			"sourceMaps": true,
+			"args": ["--extensionDevelopmentPath=${workspaceRoot}" ],
+			"outDir": "${workspaceRoot}"
 		}
 	]
 }
