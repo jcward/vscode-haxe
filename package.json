@@ -1,7 +1,7 @@
 {
 	"name": "haxe",
 	"description": "Haxe Language Extension",
-	"version": "0.0.5",
+	"version": "0.0.7",
 	"publisher": "haxedevs",
 	"author": {
 		"name": "Patrick Le Clec'h & Jeff Ward & Dan Korostelev"
