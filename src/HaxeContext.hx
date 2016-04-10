@@ -22,6 +22,7 @@ import js.Promise;
 import js.node.ChildProcess;
 import js.node.Path;
 import js.node.Fs;
+import js.node.Os;
 
 import haxe.Timer;
 
@@ -534,13 +535,19 @@ class HaxeContext  {
         return launchServer();
     }
     function initTmpDir() {
-        if (configuration.haxeTmpDirectory != "") {
-            tmpDir = configuration.haxeTmpDirectory.addTrailingSep(platform.Platform.instance);
+        tmpDir = configuration.haxeTmpDirectory;
+        if (tmpDir == null) tmpDir = "";
+        if(tmpDir == "auto") {
+            try { tmpDir = Os.tmpdir(); } catch (e:Dynamic) {tmpDir = "";};
+        }
+        if (tmpDir != "") {
+            tmpDir = tmpDir.addTrailingSep(platform.Platform.instance);
             var hash = haxe.crypto.Sha1.encode(realWorkingDir);
             tmpProjectDir = Path.join(tmpDir, hash).normalize();
             try {
                 tmpProjectDir.mkDirSync();
                 useTmpDir = true;
+                'Using $tmpProjectDir as temporary directory'.displayAsInfo();
             } catch (e:Dynamic) {
                 unuseTmpDir();
                 'Can\'t create temporary directory $tmpProjectDir'.displayAsError();
