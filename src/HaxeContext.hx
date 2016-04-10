@@ -547,7 +547,6 @@ class HaxeContext  {
             try {
                 tmpProjectDir.mkDirSync();
                 useTmpDir = true;
-                'Using $tmpProjectDir as temporary directory'.displayAsInfo();
             } catch (e:Dynamic) {
                 unuseTmpDir();
                 'Can\'t create temporary directory $tmpProjectDir'.displayAsError();
@@ -591,7 +590,8 @@ class VSCTool {
                     configuration.haxeServerPort = port;
                     client.port = port;
 
-                    'Using ${client.version} ${ client.isPatchAvailable ? "--patch" : "non-patching" } completion server at ${configuration.haxeServerHost} on port $port'.displayAsInfo();
+                    var version_reg = ~/\s\-\s\(C\).*/; // Trim verbose: - (C)2005-...
+                    'Using ${ version_reg.replace(client.version, "") } ${ client.isPatchAvailable ? "patching" : "non-patching" }, at ${configuration.haxeServerHost}:$port${ useTmpDir ? ", tmp="+tmpProjectDir : ""}'.displayAsInfo();
 
                     if (data.isPatchAvailable) {
                         var cl = client.cmdLine.save();

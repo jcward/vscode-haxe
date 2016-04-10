@@ -555,7 +555,6 @@ HaxeContext.prototype = {
 			try {
 				Tool.mkDirSync(this.tmpProjectDir);
 				this.useTmpDir = true;
-				Vscode.window.showInformationMessage("Using " + this.tmpProjectDir + " as temporary directory");
 			} catch( e1 ) {
 				if (e1 instanceof js__$Boot_HaxeError) e1 = e1.val;
 				this.unuseTmpDir();
@@ -587,7 +586,8 @@ HaxeContext.prototype = {
 				if(data.isHaxeServer) {
 					_g.configuration.haxeServerPort = port;
 					_g.client.port = port;
-					Vscode.window.showInformationMessage("Using " + _g.client.version + " " + (_g.client.isPatchAvailable?"--patch":"non-patching") + " completion server at " + _g.configuration.haxeServerHost + " on port " + port);
+					var version_reg = new EReg("\\s\\-\\s\\(C\\).*","");
+					Tool.displayAsInfo("Using " + version_reg.replace(_g.client.version,"") + " " + (_g.client.isPatchAvailable?"patching":"non-patching") + ", at " + _g.configuration.haxeServerHost + ":" + port + (_g.useTmpDir?", tmp=" + _g.tmpProjectDir:""));
 					if(data.isPatchAvailable) {
 						var cl = _g.client.cmdLine.save();
 						var dd = _g.resetDirtyDocuments();
