@@ -28,6 +28,16 @@
 	],
 	"main": "./haxe.js",
 	"contributes": {
+		"debuggers": [
+			{
+				"type": "haxe",
+				"label": "haxe",
+				"enableBreakpointsFor":
+				{
+					"languageIds": ["haxe"]
+				}
+            }
+        ],
 		"commands": [
 			{
 				"command": "haxe.hello",
