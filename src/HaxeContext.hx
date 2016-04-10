@@ -479,7 +479,7 @@ class HaxeContext  {
                         var document = ds.document;
                         cnt --;
                         needDiagnose = needDiagnose || needDiagnostic(ds);
-                        diagnostics.delete(untyped document.uri);
+                        undiagnoseDocument(document);
                         patchFullDocument(ds).then(function(ds) {
                             if (cnt==0 && needDiagnose) diagnose(1);
                         });
@@ -498,7 +498,7 @@ class HaxeContext  {
                             if (!ds.isSaving()) {
                                 isDirty = true;
                                 ds.diagnoseOnSave = false;
-                                diagnostics.delete(untyped ds.document.uri);
+                                undiagnoseDocument(ds.document);
                                 saveFullDocument(ds);
                             }
                         } else {
@@ -525,7 +525,7 @@ class HaxeContext  {
 
         // remove the patch if the document is opened, saved, or closed
         context.subscriptions.push(Vscode.workspace.onDidOpenTextDocument(onOpenDocument));
-        context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument(onSaveDocument));
+        context.subscriptions.push(Vscode.workspace.onDidSaveTextDocument(onSaveDocumentFromVSC));
         context.subscriptions.push(Vscode.workspace.onDidCloseTextDocument(onCloseDocument));
 
         completionHandler = new CompletionHandler(this);
@@ -710,19 +710,25 @@ class VSCTool {
         }
         return ds;
     }
-    public function onCloseDocument(document) {
+    function removeTmpFile(ds:DocumentState) {
+        if (useTmpDir && ds.tmpPath != null && ds.tmpPath != ds.realPath) {
+            Fs.unlinkSync(ds.tmpPath);
+        }
+        ds.tmpPath = null;
+    }
+    public function onCloseDocument(document:TextDocument) {
         var path:String = document.uri.fsPath;
         var ds = getDocumentState(path);
+        removeTmpFile(ds);
         ds.document = null;
         ds.realPath = null;
-        ds.tmpPath = null;
         documentsState.remove(path);
         documentsState.remove(path.normalize());
         if (client.isPatchAvailable) {
             client.cmdLine.save().beginPatch(path).remove();
             client.sendAll(null, true);
         }
-        diagnostics.delete(untyped document.uri);
+        undiagnoseDocument(document);
     }
     function onOpenDocument(document:TextDocument) {
         var path:String = document.uri.fsPath;
@@ -745,12 +751,19 @@ class VSCTool {
             );
         });
     }
-    function onSaveDocument(document:TextDocument) {
+    function onSaveDocumentFromVSC(document:TextDocument) {
+        onSaveDocument(document, true);
+    }
+    function onSaveDocument(document:TextDocument, ?saveFromVS=false) {
         var path:String = document.uri.fsPath;
         var ds = getDocumentState(path, document);
+
         ds.saved();
 
+        if (saveFromVS) removeTmpFile(ds);
+
         if (ds.diagnoseOnSave) removeAndDiagnoseDocument(document);
+        else undiagnoseDocument(document);
         ds.diagnoseOnSave = configuration.haxeDiagnoseOnSave;
     }
     function diagnose(retry) {
@@ -775,8 +788,10 @@ class VSCTool {
             }
         );
     }
-    public function removeAndDiagnoseDocument(document) {
-        diagnostics.delete(untyped document.uri);
+    inline function undiagnoseDocument(document:TextDocument) if (document != null) diagnostics.delete(document.uri);
+
+    public function removeAndDiagnoseDocument(document:TextDocument) {
+        undiagnoseDocument(document);
         var path:String = document.uri.fsPath;
         if (client.isPatchAvailable) {
             client.cmdLine.beginPatch(path).remove();
@@ -910,7 +925,7 @@ class VSCTool {
             }
         }
 
-        diagnostics.delete(untyped document.uri);
+        undiagnoseDocument(document);
 
         if (changed) {
             client.sendAll(
