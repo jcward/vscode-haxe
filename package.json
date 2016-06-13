@@ -22,9 +22,9 @@
 	],
 	"activationEvents": [
 		"onLanguage:haxe",
-				"onLanguage:hxml",
-				"workspaceContains:build.hxml",
-				"workspaceContains:project.hxml"
+		"onLanguage:hxml",
+		"workspaceContains:build.hxml",
+		"workspaceContains:project.hxml"
 	],
 	"main": "./haxe.js",
 	"contributes": {
@@ -32,12 +32,13 @@
 			{
 				"type": "haxe",
 				"label": "haxe",
-				"enableBreakpointsFor":
-				{
-					"languageIds": ["haxe"]
+				"enableBreakpointsFor": {
+					"languageIds": [
+						"haxe"
+					]
 				}
-            }
-        ],
+			}
+		],
 		"commands": [
 			{
 				"command": "haxe.hello",
@@ -47,14 +48,26 @@
 		"languages": [
 			{
 				"id": "haxe",
-				"aliases": ["Haxe", "haxe"],
-				"extensions": [".hx",".hxsl",".hscript"],
+				"aliases": [
+					"Haxe",
+					"haxe"
+				],
+				"extensions": [
+					".hx",
+					".hxsl",
+					".hscript"
+				],
 				"configuration": "./haxe.configuration.json"
 			},
 			{
 				"id": "hxml",
-				"aliases": ["HXML", "hxml"],
-				"extensions": [".hxml"],
+				"aliases": [
+					"HXML",
+					"hxml"
+				],
+				"extensions": [
+					".hxml"
+				],
 				"configuration": "./hxml.configuration.json"
 			}
 		],
@@ -70,72 +83,66 @@
 				"path": "./syntaxes/hxml.tmLanguage"
 			}
 		],
-				"snippets": [
-						{
-								"language": "haxe",
-								"path": "./snippets/haxe.json"
-						}
-				],
-				"configuration": {
-						"type": "object",
-						"title": "Haxe configuration",
-						"properties": {
-								"haxe.haxePath": {
-								"type": "string",
-								"default": "",
-								"description": "Where to find haxe executable. If not set must be in your global path"
-								},
-								"haxe.haxelibPath": {
-								"type": "string",
-								"default": "",
-								"description": "Where to find haxelib executable. If not set must be in your global path"
-								},
-								"haxe.haxeDefaultBuildFile": {
-								"type": "string",
-								"default": "build.hxml",
-								"description": "Name of your default build hxml file"
-								},
-								"haxe.haxeServerHost": {
-								"type": "string",
-								"default": "127.0.0.1",
-								"description": "Address of the haxe server"
-								},
-								"haxe.haxeServerPort": {
-								"type": "integer",
-								"default": 6000,
-								"description": "Port number of the haxe server"
-								},
-								"haxe.haxeDiagnoseOnSave": {
-								"type": "boolean",
-								"default": true,
-								"description": "Validate project when a file is saved"
-								},
-								"haxe.haxeDiagnosticDelay": {
-								"type": "integer",
-								"default": 2000,
-								"description": "Time (in ms) after we can launch a file validation"
-								},
-								"haxe.haxeCacheHaxelib": {
-								"type": "boolean",
-								"default": true,
-								"description": "If true the -lib will be cached into internal build file. It will be refreshed when real hxml file change"
-								},
-								"haxe.haxeVSCodeBuildFile": {
-								"type": "string",
-								"default": "vscode-project.hxml",
-								"description": "File that will be used internally(will be overwritten when the real hxml file changed) for compile/build/..."
-								},
-								"haxe.haxeTmpDirectory": {
-								"type": "string",
-								"default": "auto",
-								"description": "if set to auto or other directory a temp directory will be used and no change will be made to your source file (unless you saved it).\nIn mode auto will try to use the OS temp directory.\n!!!Do not use any of your source directory as a temp one as file maybe deleted!!!\nFor performance using a ramdisk is preferable"
-								},
-								"haxe.haxeUseTmpAsWorkingDirectory": {
-								"type": "boolean",
-								"default": false,
-								"description": "If set and a tmp directory also specified, the tmp directory will be used as the working directory"
-								}
-						}
+		"configuration": {
+			"type": "object",
+			"title": "Haxe configuration",
+			"properties": {
+				"haxe.haxePath": {
+					"type": "string",
+					"default": "",
+					"description": "Where to find haxe executable. If not set must be in your global path"
+				},
+				"haxe.haxelibPath": {
+					"type": "string",
+					"default": "",
+					"description": "Where to find haxelib executable. If not set must be in your global path"
+				},
+				"haxe.haxeDefaultBuildFile": {
+					"type": "string",
+					"default": "build.hxml",
+					"description": "Name of your default build hxml file"
+				},
+				"haxe.haxeServerHost": {
+					"type": "string",
+					"default": "127.0.0.1",
+					"description": "Address of the haxe server"
+				},
+				"haxe.haxeServerPort": {
+					"type": "integer",
+					"default": 6000,
+					"description": "Port number of the haxe server"
+				},
+				"haxe.haxeDiagnoseOnSave": {
+					"type": "boolean",
+					"default": true,
+					"description": "Validate project when a file is saved"
+				},
+				"haxe.haxeDiagnosticDelay": {
+					"type": "integer",
+					"default": 2000,
+					"description": "Time (in ms) after we can launch a file validation"
+				},
+				"haxe.haxeCacheHaxelib": {
+					"type": "boolean",
+					"default": true,
+					"description": "If true the -lib will be cached into internal build file. It will be refreshed when real hxml file change"
+				},
+				"haxe.haxeVSCodeBuildFile": {
+					"type": "string",
+					"default": "vscode-project.hxml",
+					"description": "File that will be used internally(will be overwritten when the real hxml file changed) for compile/build/..."
+				},
+				"haxe.haxeTmpDirectory": {
+					"type": "string",
+					"default": "auto",
+					"description": "if set to auto or other directory a temp directory will be used and no change will be made to your source file (unless you saved it).\nIn mode auto will try to use the OS temp directory.\n!!!Do not use any of your source directory as a temp one as file maybe deleted!!!\nFor performance using a ramdisk is preferable"
+				},
+				"haxe.haxeUseTmpAsWorkingDirectory": {
+					"type": "boolean",
+					"default": false,
+					"description": "If set and a tmp directory also specified, the tmp directory will be used as the working directory"
 				}
+			}
+		}
 	}
 }
