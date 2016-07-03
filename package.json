@@ -1,7 +1,7 @@
 {
 	"name": "haxe",
 	"description": "Haxe Language Extension",
-	"version": "0.0.7",
+	"version": "0.0.9",
 	"publisher": "haxedevs",
 	"author": {
 		"name": "Patrick Le Clec'h & Jeff Ward & Dan Korostelev"
@@ -135,7 +135,7 @@
 				"haxe.haxeTmpDirectory": {
 					"type": "string",
 					"default": "auto",
-					"description": "if set to auto or other directory a temp directory will be used and no change will be made to your source file (unless you saved it).\nIn mode auto will try to use the OS temp directory.\n!!!Do not use any of your source directory as a temp one as file maybe deleted!!!\nFor performance using a ramdisk is preferable"
+					"description": "if set to auto or other directory a temp directory will be used and no change will be made to your source file (unless you saved it).  In mode auto will try to use the OS temp directory.  !!!Do not use any of your source directory as a temp one as file maybe deleted!!!  For performance using a ramdisk is preferable"
 				},
 				"haxe.haxeUseTmpAsWorkingDirectory": {
 					"type": "boolean",
