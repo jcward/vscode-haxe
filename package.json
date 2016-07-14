@@ -39,12 +39,6 @@
 				}
 			}
 		],
-		"commands": [
-			{
-				"command": "haxe.hello",
-				"title": "Hello from Haxe!"
-			}
-		],
 		"languages": [
 			{
 				"id": "haxe",
