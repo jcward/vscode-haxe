@@ -4,7 +4,9 @@ by Patrick Le Clec'h, Jeff Ward, and Dan Korostelev
 
 ------------------------
 
-**Legacy note:** This extension supports Haxe 3.2.1 (and perhaps earlier), and is no longer under active development. A newer extension supports Haxe 3.3 and later, find it in the [vscode marketplace](https://marketplace.visualstudio.com/items?itemName=nadako.vshaxe) or on [github](https://github.com/vshaxe/vshaxe).
+**Legacy note:** This extension supports Haxe 3.2.1 (and perhaps earlier), and while it may work with later versions of Haxe, it is no longer under active development.
+
+You can find the newer extension (supporting more features in Haxe 3.3 and later) in the [vscode marketplace](https://marketplace.visualstudio.com/items?itemName=nadako.vshaxe) or on [github](https://github.com/vshaxe/vshaxe).
 
 ------------------------
 
