@@ -2,6 +2,12 @@
 Haxe language extension for Visual Studio Code
 by Patrick Le Clec'h, Jeff Ward, and Dan Korostelev
 
+------------------------
+
+**Legacy note:** This extension supports Haxe 3.2.1 (and perhaps earlier), and is no longer under active development. A newer extension supports Haxe 3.3 and later, find it in the [vscode marketplace](https://marketplace.visualstudio.com/items?itemName=nadako.vshaxe) or on [github](https://github.com/vshaxe/vshaxe).
+
+------------------------
+
 This extension provides:
 - Syntax highlighting for .hx and .hxml files
 - Code completion (work in progress)
