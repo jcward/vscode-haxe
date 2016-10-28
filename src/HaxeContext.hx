@@ -229,7 +229,6 @@ class HaxeContext  {
             haxeTmpDirectory: tempConfig.haxeTmpDirectory,
             haxeUseTmpAsWorkingDirectory: tempConfig.haxeUseTmpAsWorkingDirectory
         };
-
         platform.Platform.init(js.Node.process.platform);
         configuration.update(platform.Platform.instance);
 
