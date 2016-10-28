@@ -215,7 +215,20 @@ class HaxeContext  {
 
         haxeProcess = null;
 
-        configuration = cast Vscode.workspace.getConfiguration(languageID());
+        var tempConfig = cast Vscode.workspace.getConfiguration(languageID());
+        configuration = {
+            haxePath: tempConfig.haxePath,
+            haxelibPath: tempConfig.haxelibPath,
+            haxeDefaultBuildFile: tempConfig.haxeDefaultBuildFile,
+            haxeServerHost: tempConfig.haxeServerHost,
+            haxeServerPort: tempConfig.haxeServerPort,
+            haxeDiagnoseOnSave: tempConfig.haxeDiagnoseOnSave,
+            haxeDiagnosticDelay: tempConfig.haxeDiagnosticDelay,
+            haxeCacheHaxelib: tempConfig.haxeCacheHaxelib,
+            haxeVSCodeBuildFile: tempConfig.haxeVSCodeBuildFile,
+            haxeTmpDirectory: tempConfig.haxeTmpDirectory,
+            haxeUseTmpAsWorkingDirectory: tempConfig.haxeUseTmpAsWorkingDirectory,
+        };
         platform.Platform.init(js.Node.process.platform);
         configuration.update(platform.Platform.instance);
 
