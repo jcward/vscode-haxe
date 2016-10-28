@@ -69,7 +69,8 @@ EReg.prototype = {
 var HaxeContext = function(context) {
 	this.context = context;
 	this.haxeProcess = null;
-	this.configuration = Vscode.workspace.getConfiguration("haxe");
+	var tempConfig = Vscode.workspace.getConfiguration("haxe");
+	this.configuration = { haxePath : tempConfig.haxePath, haxelibPath : tempConfig.haxelibPath, haxeDefaultBuildFile : tempConfig.haxeDefaultBuildFile, haxeServerHost : tempConfig.haxeServerHost, haxeServerPort : tempConfig.haxeServerPort, haxeDiagnoseOnSave : tempConfig.haxeDiagnoseOnSave, haxeDiagnosticDelay : tempConfig.haxeDiagnosticDelay, haxeCacheHaxelib : tempConfig.haxeCacheHaxelib, haxeVSCodeBuildFile : tempConfig.haxeVSCodeBuildFile, haxeTmpDirectory : tempConfig.haxeTmpDirectory, haxeUseTmpAsWorkingDirectory : tempConfig.haxeUseTmpAsWorkingDirectory};
 	platform_Platform.init(process.platform);
 	haxe_HaxeConfiguration.update(this.configuration,platform_Platform.instance);
 	this.initBuildFile();
